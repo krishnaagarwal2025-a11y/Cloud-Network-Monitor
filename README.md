@@ -76,11 +76,11 @@ The testbed models a production multi-tier cloud architecture with distinct, mea
 | **`api_srv`** | Host | `10.0.0.12/24` | `00:00:00:00:00:12` | Backend REST API Service |
 | **`auth_srv`** | Host | `10.0.0.13/24` | `00:00:00:00:00:13` | Authentication & Identity Service |
 | **`db_srv`** | Host | `10.0.0.20/24` | `00:00:00:00:00:20` | Database Storage Service |
-| **`s_client`** | Switch | - | - | Client Access Tier Switch |
-| **`s_edge`** | Switch | - | - | Edge / Gateway Tier Switch |
-| **`s_lb`** | Switch | - | - | Load Balancer DMZ Switch |
-| **`s_app`** | Switch | - | - | Application Services Switch |
-| **`s_db`** | Switch | - | - | Database Backend Switch |
+| **`s_client`** | Switch | - | - | DPID: `0000000000000001` (Client Access Switch) |
+| **`s_edge`** | Switch | - | - | DPID: `0000000000000002` (Edge Gateway Switch) |
+| **`s_lb`** | Switch | - | - | DPID: `0000000000000003` (Load Balancer DMZ Switch) |
+| **`s_app`** | Switch | - | - | DPID: `0000000000000004` (App Services Switch) |
+| **`s_db`** | Switch | - | - | DPID: `0000000000000005` (Database Tier Switch) |
 
 ### Measurable Inter-Tier Segments
 

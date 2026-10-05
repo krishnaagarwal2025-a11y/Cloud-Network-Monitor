@@ -93,6 +93,16 @@ class TestCloudTopologyStructure(unittest.TestCase):
                 f"IP mismatch for {host_name}: {node_info.get('ip')} != {expected_conf['ip']}",
             )
 
+    def test_deterministic_switch_dpids(self):
+        """Verify explicit deterministic DPID assignment for all tier switches."""
+        for switch_name, expected_conf in SWITCH_CONFIGS.items():
+            node_info = self.topo.nodeInfo(switch_name)
+            self.assertEqual(
+                node_info.get('dpid'),
+                expected_conf['dpid'],
+                f"DPID mismatch for {switch_name}: {node_info.get('dpid')} != {expected_conf['dpid']}",
+            )
+
 
 class TestCloudTopologyLiveNetwork(unittest.TestCase):
     """
@@ -112,6 +122,17 @@ class TestCloudTopologyLiveNetwork(unittest.TestCase):
             print("\n*** Starting live Mininet testbed...")
             net = create_network()
             net.start()
+
+            # Verify switches exist with exact deterministic DPIDs
+            for switch_name, s_conf in SWITCH_CONFIGS.items():
+                sw = net.get(switch_name)
+                self.assertIsNotNone(sw, f"Live switch {switch_name} not found in Mininet")
+                expected_dpid = s_conf['dpid']
+                self.assertEqual(
+                    sw.dpid,
+                    expected_dpid,
+                    f"Live DPID mismatch on {switch_name}: {sw.dpid} != {expected_dpid}",
+                )
 
             # Verify hosts exist in live network
             for host_name in HOST_CONFIGS:
@@ -151,6 +172,19 @@ class TestCloudTopologyLiveNetwork(unittest.TestCase):
             for app in [web_srv, api_srv, auth_srv]:
                 loss = net.ping(hosts=[app, db_srv], timeout='1')
                 self.assertEqual(loss, 0.0, f"Ping failed: {app.name} <-> db_srv")
+
+            # Specific end-to-end ping verifications (3 packets each)
+            print("*** Testing client ping -c 3 edge_gw...")
+            out = client.cmd(f'ping -c 3 {edge_gw.IP()}')
+            self.assertIn(' 0% packet loss', out, f"Packet loss during client -> edge_gw: {out}")
+
+            print("*** Testing web_srv ping -c 3 db_srv...")
+            out = web_srv.cmd(f'ping -c 3 {db_srv.IP()}')
+            self.assertIn(' 0% packet loss', out, f"Packet loss during web_srv -> db_srv: {out}")
+
+            print("*** Testing client ping -c 3 db_srv (end-to-end)...")
+            out = client.cmd(f'ping -c 3 {db_srv.IP()}')
+            self.assertIn(' 0% packet loss', out, f"Packet loss during client -> db_srv: {out}")
 
             # Test full network pingall (0% packet loss)
             print("*** Testing pingAll across all nodes...")

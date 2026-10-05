@@ -69,13 +69,28 @@ HOST_CONFIGS = {
     },
 }
 
-# Switch configurations representing tier boundaries
+# Switch configurations representing tier boundaries with deterministic Datapath IDs (DPIDs)
 SWITCH_CONFIGS = {
-    's_client': {'description': 'Client Access Tier Switch'},
-    's_edge': {'description': 'Edge Gateway Tier Switch'},
-    's_lb': {'description': 'Load Balancer DMZ Switch'},
-    's_app': {'description': 'Application Services Mesh Switch'},
-    's_db': {'description': 'Database Tier Switch'},
+    's_client': {
+        'dpid': '0000000000000001',
+        'description': 'Client Access Tier Switch',
+    },
+    's_edge': {
+        'dpid': '0000000000000002',
+        'description': 'Edge Gateway Tier Switch',
+    },
+    's_lb': {
+        'dpid': '0000000000000003',
+        'description': 'Load Balancer DMZ Switch',
+    },
+    's_app': {
+        'dpid': '0000000000000004',
+        'description': 'Application Services Mesh Switch',
+    },
+    's_db': {
+        'dpid': '0000000000000005',
+        'description': 'Database Tier Switch',
+    },
 }
 
 # Host to switch attachments
@@ -137,10 +152,10 @@ class CloudTopology(Topo):
 
     def build(self, **kwargs):
         """Construct switches, hosts, and interconnected segment links."""
-        # 1. Create Tier Switches
+        # 1. Create Tier Switches with deterministic DPIDs
         switches = {}
-        for s_name in SWITCH_CONFIGS:
-            switches[s_name] = self.addSwitch(s_name)
+        for s_name, s_conf in SWITCH_CONFIGS.items():
+            switches[s_name] = self.addSwitch(s_name, dpid=s_conf['dpid'])
 
         # 2. Create Hosts with deterministic IP and MAC addresses
         hosts = {}

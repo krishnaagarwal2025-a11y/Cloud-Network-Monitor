@@ -144,3 +144,92 @@ If Mininet or Open vSwitch ever terminates unexpectedly or interfaces remain:
 ```bash
 sudo mn -c
 ```
+
+---
+
+## Phase 3: Traffic Generation & KPI Measurement
+
+Phase 3 introduces a lightweight measurement and probing layer on top of the cloud topology without requiring external agents or daemons:
+
+### 1. Probing & Measurement Capabilities
+
+- **ICMP Monitoring (`src/traffic/icmp.py`)**:
+  - Probes key paths (`client -> edge_gw`, `client -> web_srv`, `client -> api_srv`, `client -> db_srv`, `web_srv -> db_srv`).
+  - Measures `rtt_min_ms`, `rtt_avg_ms`, `rtt_max_ms`, `rtt_mdev_ms` (jitter), and `packet_loss_percent`.
+- **HTTP Monitoring (`src/traffic/http.py`)**:
+  - Manages background HTTP service on `web_srv:8080`.
+  - Probes HTTP response time, TCP connect time, and status codes using `curl`.
+  - Records `http_response_time_ms`, `http_status`, and `http_success`.
+- **Throughput Testing (`src/traffic/iperf.py`)**:
+  - Manages `iperf3` servers on `web_srv:5201` and `db_srv:5201`.
+  - Directly executes `iperf3 -c <ip> -J` to capture precise machine-readable JSON metrics (`throughput_mbps`, `retransmits`, `mean_rtt_ms`).
+- **Orchestration & Structured Metrics (`src/traffic/manager.py`)**:
+  - `TrafficManager` coordinates lifecycle, executes test suites, and outputs structured dictionary/JSON ready for Prometheus exporters.
+
+### 2. How to Run Phase 3
+
+#### Run Unit & Integration Tests:
+```bash
+# Unit parsing tests (runs unprivileged):
+python3 -m unittest discover tests
+
+# Live Mininet traffic integration test (requires sudo):
+sudo python3 tests/test_traffic.py
+```
+
+#### Run Live Traffic Experiment & KPI Measurement:
+```bash
+sudo python3 scripts/run_traffic_test.py
+```
+
+### 3. Example Measurement Output
+
+```text
+======================================================================
+ Cloud Application Network Monitoring - Phase 3 Traffic & KPIs
+======================================================================
+
+[1/5] Instantiating and starting Mininet cloud topology...
+  ✓ Topology started successfully (7 hosts, 5 OVSBridge switches)
+
+[2/5] Setting up background application services...
+  ✓ HTTP server running on web_srv:8080
+  ✓ iperf3 servers running on web_srv:5201 and db_srv:5201
+
+[3/5] Measuring ICMP Ping Latency & Packet Loss...
+Path               | Target IP | Packets | Loss | Avg RTT | Min RTT | Max RTT | Jitter  | Status
+-------------------+-----------+---------+------+---------+---------+---------+---------+-------
+client -> edge_gw  | 10.0.0.1  | 3/3     | 0.0% | 5.21 ms | 5.12 ms | 5.34 ms | 0.09 ms | PASS  
+client -> web_srv  | 10.0.0.11 | 3/3     | 0.0% | 8.35 ms | 8.21 ms | 8.52 ms | 0.13 ms | PASS  
+client -> api_srv  | 10.0.0.12 | 3/3     | 0.0% | 8.31 ms | 8.19 ms | 8.48 ms | 0.12 ms | PASS  
+client -> db_srv   | 10.0.0.20 | 3/3     | 0.0% | 9.42 ms | 9.30 ms | 9.61 ms | 0.14 ms | PASS  
+web_srv -> db_srv  | 10.0.0.20 | 3/3     | 0.0% | 1.15 ms | 1.08 ms | 1.22 ms | 0.06 ms | PASS  
+
+[4/5] Measuring HTTP Response Time (client -> web_srv:8080)...
+Request  | Source -> Target | URL                     | Status Code | Connect Time | Total Time | Result
+---------+------------------+-------------------------+-------------+--------------+------------+-------
+Req #1   | client -> web_srv| http://10.0.0.11:8080/  | 200         | 8.24 ms      | 15.60 ms   | 200 OK
+Req #2   | client -> web_srv| http://10.0.0.11:8080/  | 200         | 8.18 ms      | 14.85 ms   | 200 OK
+Req #3   | client -> web_srv| http://10.0.0.11:8080/  | 200         | 8.12 ms      | 14.72 ms   | 200 OK
+Req #4   | client -> web_srv| http://10.0.0.11:8080/  | 200         | 8.20 ms      | 14.90 ms   | 200 OK
+Req #5   | client -> web_srv| http://10.0.0.11:8080/  | 200         | 8.15 ms      | 14.65 ms   | 200 OK
+
+[5/5] Measuring TCP Throughput with iperf3...
+Path              | Target IP | Duration | Throughput  | Retransmits | Mean RTT | Status
+------------------+-----------+----------+-------------+-------------+----------+-------
+client -> web_srv | 10.0.0.11 | 3.0 s    | 98.40 Mbps  | 0           | 8.25 ms  | PASS  
+client -> db_srv  | 10.0.0.20 | 3.0 s    | 98.25 Mbps  | 0           | 9.35 ms  | PASS  
+
+======================================================================
+ Summary KPI Metrics (Ready for Prometheus Telemetry Exporter)
+======================================================================
+  • ping_latency_ms:        8.35 ms
+  • packet_loss_percent:    0.0 %
+  • http_response_time_ms:  14.94 ms
+  • http_success:           1
+  • throughput_mbps:        98.40 Mbps
+======================================================================
+
+✓ Saved structured metrics to: results/traffic_metrics_latest.json
+```
+

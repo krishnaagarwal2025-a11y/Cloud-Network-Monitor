@@ -21,10 +21,9 @@ switches and TCLinks so that network metrics (latency, jitter, loss, throughput)
 can be measured, faults injected via tc/netem, and anomalies localized.
 """
 
-from functools import partial
 from mininet.topo import Topo
 from mininet.net import Mininet
-from mininet.node import OVSSwitch, Controller
+from mininet.node import OVSBridge
 from mininet.link import TCLink
 from mininet.cli import CLI
 from mininet.log import setLogLevel, info
@@ -152,10 +151,14 @@ class CloudTopology(Topo):
 
     def build(self, **kwargs):
         """Construct switches, hosts, and interconnected segment links."""
-        # 1. Create Tier Switches with deterministic DPIDs
+        # 1. Create Tier Switches with deterministic DPIDs using OVSBridge (no external controller)
         switches = {}
         for s_name, s_conf in SWITCH_CONFIGS.items():
-            switches[s_name] = self.addSwitch(s_name, dpid=s_conf['dpid'])
+            switches[s_name] = self.addSwitch(
+                s_name,
+                cls=OVSBridge,
+                dpid=s_conf['dpid'],
+            )
 
         # 2. Create Hosts with deterministic IP and MAC addresses
         hosts = {}
@@ -191,17 +194,17 @@ class CloudTopology(Topo):
 
 def create_network(topo=None, interactive=False):
     """
-    Instantiate and configure the Mininet network.
-    Uses OVSSwitch in standalone failMode for zero-overhead, reliable L2 learning.
+    Instantiate and configure the Mininet network without an external controller.
+    Uses OVSBridge (OVSSwitch in standalone bridge mode) for reliable kernel-level
+    L2 learning switch forwarding without requiring an OpenFlow controller executable.
     """
     if topo is None:
         topo = CloudTopology()
 
-    switch_cls = partial(OVSSwitch, failMode='standalone')
     net = Mininet(
         topo=topo,
-        switch=switch_cls,
-        controller=Controller,
+        switch=OVSBridge,
+        controller=None,
         link=TCLink,
         autoSetMacs=True,
         autoStaticArp=True,

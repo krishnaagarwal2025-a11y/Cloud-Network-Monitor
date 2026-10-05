@@ -102,11 +102,11 @@ Each inter-tier boundary is connected via a dedicated Open vSwitch link with bas
 You can launch the topology directly into the Mininet CLI:
 
 ```bash
-# Method A: Using the standalone script
+# Method A: Using the standalone script (recommended)
 sudo python3 src/topology/cloud_topology.py
 
 # Method B: Using the Mininet CLI with custom topo flag
-sudo mn --custom src/topology/cloud_topology.py --topo cloud --link tc
+sudo mn --custom src/topology/cloud_topology.py --topo cloud --switch ovsbr --controller none --link tc
 ```
 
 Inside the Mininet CLI, test connectivity:

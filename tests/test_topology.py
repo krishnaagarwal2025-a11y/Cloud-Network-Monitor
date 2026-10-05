@@ -119,9 +119,16 @@ class TestCloudTopologyLiveNetwork(unittest.TestCase):
         """
         net = None
         try:
-            print("\n*** Starting live Mininet testbed...")
+            print("\n*** Starting live Mininet testbed (controllerless OVSBridge mode)...")
             net = create_network()
             net.start()
+
+            # Verify no external OpenFlow controller is configured or required
+            self.assertEqual(
+                len(net.controllers),
+                0,
+                f"Expected 0 external controllers, found {len(net.controllers)}",
+            )
 
             # Verify switches exist with exact deterministic DPIDs
             for switch_name, s_conf in SWITCH_CONFIGS.items():

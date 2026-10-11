@@ -12,13 +12,14 @@ Tests:
 import os
 import sys
 import unittest
+from contextlib import ExitStack
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.traffic.icmp import parse_ping_output
 from src.traffic.http import parse_curl_output
 from src.traffic.iperf import parse_iperf_json
-from src.topology.cloud_topology import create_network
+from src.topology.lifecycle import experiment_network
 from src.traffic.manager import TrafficManager
 
 
@@ -57,7 +58,7 @@ PING 10.0.0.99 (10.0.0.99) 56(84) bytes of data.
         self.assertEqual(parsed['packets_sent'], 3)
         self.assertEqual(parsed['packets_received'], 0)
         self.assertEqual(parsed['packet_loss_percent'], 100.0)
-        self.assertEqual(parsed['rtt_avg_ms'], 0.0)
+        self.assertIsNone(parsed['rtt_avg_ms'])
         self.assertFalse(parsed['success'])
 
 
@@ -110,13 +111,13 @@ class TestIperfParsing(unittest.TestCase):
     def test_parse_error_iperf_json(self):
         sample = '{"error": "unable to connect to server: Connection refused"}'
         parsed = parse_iperf_json(sample)
-        self.assertEqual(parsed['throughput_mbps'], 0.0)
+        self.assertIsNone(parsed['throughput_mbps'])
         self.assertFalse(parsed['success'])
         self.assertIn("Connection refused", parsed['error_message'])
 
     def test_parse_malformed_json(self):
         parsed = parse_iperf_json("invalid json string")
-        self.assertEqual(parsed['throughput_mbps'], 0.0)
+        self.assertIsNone(parsed['throughput_mbps'])
         self.assertFalse(parsed['success'])
 
 
@@ -128,16 +129,21 @@ class TestTrafficLiveIntegration(unittest.TestCase):
 
     @unittest.skipUnless(os.geteuid() == 0, "Live Mininet test requires root (sudo) privileges.")
     def test_live_traffic_suite(self):
+        network = ExitStack()
         net = None
         manager = None
+        services = []
         try:
             print("\n*** Starting Mininet for live traffic measurement test...")
-            net = create_network()
-            net.start()
+            net = network.enter_context(experiment_network())
 
             manager = TrafficManager(net)
             print("*** Setting up background HTTP and iperf3 services...")
             manager.setup_services(http_port=8080, iperf_port=5201)
+            services = manager.services
+            self.assertEqual(len(services), 3)
+            self.assertEqual(len({s.pid for s in services}), 3)
+            manager.check_services()
 
             print("*** Running live ICMP measurements...")
             icmp_results = manager.run_icmp_suite(
@@ -159,26 +165,33 @@ class TestTrafficLiveIntegration(unittest.TestCase):
                 self.assertGreater(res.response_time_ms, 0.0)
 
             print("*** Running live iperf3 throughput measurement...")
-            iperf_results = manager.run_iperf_suite(targets=['web_srv'], duration=1)
-            self.assertEqual(len(iperf_results), 1)
+            iperf_results = manager.run_iperf_suite(targets=['web_srv', 'db_srv'], duration=1)
+            self.assertEqual(len(iperf_results), 2)
+            for measurement in iperf_results:
+                self.assertTrue(measurement.success, measurement.error_message)
+                self.assertGreater(measurement.throughput_mbps, 0)
             self.assertTrue(iperf_results[0].success, f"iperf3 failed: {iperf_results[0].error_message}")
             self.assertGreater(iperf_results[0].throughput_mbps, 0.0)
             print(f"*** Measured throughput: {iperf_results[0].throughput_mbps} Mbps")
 
             print("*** Collecting aggregated KPI dictionary...")
             kpis = manager.collect_all_kpis(icmp_count=2, http_count=2, iperf_duration=1)
+            self.assertTrue(kpis['success'])
+            manager.check_services()
             self.assertIn('summary', kpis)
             self.assertIn('ping_latency_ms', kpis['summary'])
             self.assertIn('http_response_time_ms', kpis['summary'])
             self.assertIn('throughput_mbps', kpis['summary'])
 
         finally:
-            if manager:
-                print("*** Tearing down background traffic services...")
-                manager.teardown_services()
-            if net:
-                print("*** Stopping Mininet network...")
-                net.stop()
+            try:
+                if manager:
+                    manager.teardown_services()
+                    for service in services:
+                        self.assertIsNotNone(service.process.poll())
+            finally:
+                if net:
+                    network.close()
 
 
 def run_tests():

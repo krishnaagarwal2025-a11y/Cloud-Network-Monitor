@@ -1,0 +1,349 @@
+{
+  "id": null,
+  "uid": "cloud-anomaly-detection",
+  "title": "Anomaly Detection & Fault Localisation",
+  "description": "Multi-algorithm anomaly detection (Threshold, EWMA, Z-Score) and Boolean Tomography segment localisation.",
+  "tags": [
+    "mininet",
+    "networks-lab",
+    "anomaly-detection",
+    "fault-localisation"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "editable": false,
+  "graphTooltip": 1,
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 101,
+      "title": "Anomaly Status",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cloud-prometheus"
+      },
+      "description": "Active anomaly indicator across all statistical and threshold algorithms.",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "cloud_anomaly_detected",
+          "legendFormat": "Anomaly Status",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "NORMAL", "color": "green" },
+                "1": { "text": "ANOMALY", "color": "red" }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 102,
+      "title": "Active Anomalies Count",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cloud-prometheus"
+      },
+      "description": "Total count of active anomalies across metrics and paths.",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "cloud_anomalies_total",
+          "legendFormat": "Total Anomalies",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1, "color": "orange" },
+              { "value": 3, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 103,
+      "title": "Fault Localisation Status",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cloud-prometheus"
+      },
+      "description": "Network segment fault localisation state.",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "cloud_fault_detected",
+          "legendFormat": "Fault State",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "HEALTHY", "color": "green" },
+                "1": { "text": "SEGMENT FAULT", "color": "red" }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1, "color": "red" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 104,
+      "title": "Measurement Cycle Success",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cloud-prometheus"
+      },
+      "description": "Overall measurement cycle health.",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "cloud_measurement_cycle_success",
+          "legendFormat": "Cycle Success",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "DEGRADED", "color": "red" },
+                "1": { "text": "PASS", "color": "green" }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "red" },
+              { "value": 1, "color": "green" }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 105,
+      "title": "Anomalies by Detection Engine",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cloud-prometheus"
+      },
+      "description": "Anomalies flagged by Threshold, EWMA, and Z-Score algorithms.",
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "cloud_anomaly_by_detector",
+          "legendFormat": "Engine: {{detector}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto"
+          }
+        }
+      }
+    },
+    {
+      "id": 106,
+      "title": "Inferred Fault Candidate Segments",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cloud-prometheus"
+      },
+      "description": "Candidate faulty segments identified by Boolean network tomography.",
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "cloud_fault_candidate",
+          "legendFormat": "Candidate: {{segment}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80
+          }
+        }
+      }
+    },
+    {
+      "id": 107,
+      "title": "Segment Localisation Confidence",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cloud-prometheus"
+      },
+      "description": "Confidence score of segment fault localisation (1.0 = unambiguous, 0.5 = ambiguous tie).",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "cloud_fault_confidence",
+          "legendFormat": "Confidence: {{segment}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2
+          }
+        }
+      }
+    },
+    {
+      "id": 108,
+      "title": "Path Latency During Impairment",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "cloud-prometheus"
+      },
+      "description": "Round-trip latency across all probed paths.",
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "cloud_ping_latency_seconds * 1000",
+          "legendFormat": "{{source}} -> {{target}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2
+          }
+        }
+      }
+    }
+  ]
+}

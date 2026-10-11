@@ -14,10 +14,14 @@ import json
 import os
 import sys
 import time
+import argparse
+import signal
+from pathlib import Path
+from uuid import uuid4
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.topology.cloud_topology import create_network
+from src.topology.lifecycle import experiment_network
 from src.traffic.manager import TrafficManager
 
 
@@ -36,126 +40,106 @@ def format_table(headers, rows):
     return "\n".join(output)
 
 
-def run_traffic_experiment():
-    """Execute complete live traffic generation and KPI measurement run."""
-    print("=" * 70)
-    print(" Cloud Application Network Monitoring - Phase 3 Traffic & KPIs")
-    print("=" * 70)
+def print_measurements(kpis):
+    """Render the exact records saved to JSON, including failure diagnostics."""
+    for group, fields in (
+        ('icmp', ['source', 'target', 'packets_sent', 'packets_received',
+                  'packet_loss_percent', 'rtt_min_ms', 'rtt_avg_ms', 'rtt_max_ms',
+                  'rtt_mdev_ms', 'success', 'error_message']),
+        ('http', ['source', 'target', 'http_status', 'connect_time_ms',
+                  'response_time_ms', 'success', 'error_message']),
+        ('throughput', ['source', 'target', 'duration_sec', 'throughput_mbps',
+                        'retransmits', 'mean_rtt_ms', 'success', 'error_message']),
+    ):
+        print('\n' + group.upper())
+        print(format_table(fields, [
+            ['N/A' if r.get(f) is None else r.get(f) for f in fields]
+            for r in kpis[group]]))
+    print('\nSummary (null means unavailable):')
+    print(json.dumps(kpis['summary'], indent=2, allow_nan=False))
 
-    net = None
-    manager = None
 
+def save_results(report, output_dir):
+    """Create a unique report without replacing earlier measurements."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / f'traffic_metrics_{time.time_ns()}_{uuid4().hex[:8]}.json'
+    payload = json.dumps(report, indent=2, allow_nan=False)
+    with path.open('x') as stream:
+        stream.write(payload + '\n')
+    return path
+
+
+def run_traffic_experiment(output_dir=None):
+    output_dir = output_dir or Path(__file__).resolve().parents[1] / 'results'
+    report = {'schema_version': 1, 'timestamp': time.time(), 'success': False,
+              'stage': 'startup', 'errors': [], 'cleanup_success': False}
+    exit_code = 1
+    cleanup_errors = []
+    entered = False
+    services = []
+    network_state = {}
     try:
-        print("\n[1/5] Instantiating and starting Mininet cloud topology...")
-        net = create_network()
-        net.start()
-        print("  ✓ Topology started successfully (7 hosts, 5 OVSBridge switches)")
-
-        manager = TrafficManager(net)
-
-        print("\n[2/5] Setting up background application services...")
-        manager.setup_services(http_port=8080, iperf_port=5201)
-        print("  ✓ HTTP server running on web_srv:8080")
-        print("  ✓ iperf3 servers running on web_srv:5201 and db_srv:5201")
-
-        print("\n[3/5] Measuring ICMP Ping Latency & Packet Loss...")
-        icmp_paths = [
-            ('client', 'edge_gw'),
-            ('client', 'web_srv'),
-            ('client', 'api_srv'),
-            ('client', 'db_srv'),
-            ('web_srv', 'db_srv'),
-        ]
-        icmp_results = manager.run_icmp_suite(paths=icmp_paths, count=3)
-
-        icmp_rows = []
-        for r in icmp_results:
-            icmp_rows.append([
-                f"{r.source} -> {r.target}",
-                r.target_ip,
-                f"{r.packets_received}/{r.packets_sent}",
-                f"{r.packet_loss_percent:.1f}%",
-                f"{r.rtt_avg_ms:.2f} ms",
-                f"{r.rtt_min_ms:.2f} ms",
-                f"{r.rtt_max_ms:.2f} ms",
-                f"{r.rtt_mdev_ms:.2f} ms",
-                "PASS" if r.success else "FAIL",
-            ])
-        print(format_table(
-            ["Path", "Target IP", "Packets", "Loss", "Avg RTT", "Min RTT", "Max RTT", "Jitter", "Status"],
-            icmp_rows
-        ))
-
-        print("\n[4/5] Measuring HTTP Response Time (client -> web_srv:8080)...")
-        http_results = manager.run_http_suite(count=5, delay=0.2)
-        http_rows = []
-        for idx, h in enumerate(http_results, 1):
-            http_rows.append([
-                f"Req #{idx}",
-                f"{h.source} -> {h.target}",
-                h.url,
-                h.http_status,
-                f"{h.connect_time_ms:.2f} ms",
-                f"{h.response_time_ms:.2f} ms",
-                "200 OK" if h.success else "ERROR",
-            ])
-        print(format_table(
-            ["Request", "Source -> Target", "URL", "Status Code", "Connect Time", "Total Time", "Result"],
-            http_rows
-        ))
-
-        print("\n[5/5] Measuring TCP Throughput with iperf3...")
-        iperf_results = manager.run_iperf_suite(targets=['web_srv', 'db_srv'], duration=3)
-        iperf_rows = []
-        for i in iperf_results:
-            iperf_rows.append([
-                f"{i.source} -> {i.target}",
-                i.target_ip,
-                f"{i.duration_sec:.1f} s",
-                f"{i.throughput_mbps:.2f} Mbps",
-                i.retransmits,
-                f"{i.mean_rtt_ms:.2f} ms",
-                "PASS" if i.success else "FAIL",
-            ])
-        print(format_table(
-            ["Path", "Target IP", "Duration", "Throughput", "Retransmits", "Mean RTT", "Status"],
-            iperf_rows
-        ))
-
-        # Compile structured telemetry JSON
-        kpis = manager.collect_all_kpis(icmp_count=2, http_count=2, iperf_duration=2)
-
-        print("\n" + "=" * 70)
-        print(" Summary KPI Metrics (Ready for Prometheus Telemetry Exporter)")
-        print("=" * 70)
-        print(f"  • ping_latency_ms:        {kpis['summary']['ping_latency_ms']:.2f} ms")
-        print(f"  • packet_loss_percent:    {kpis['summary']['packet_loss_percent']:.1f} %")
-        print(f"  • http_response_time_ms:  {kpis['summary']['http_response_time_ms']:.2f} ms")
-        print(f"  • http_success:           {kpis['summary']['http_success']}")
-        print(f"  • throughput_mbps:        {kpis['summary']['throughput_mbps']:.2f} Mbps")
-        print("=" * 70)
-
-        # Save to results directory
-        os.makedirs("results", exist_ok=True)
-        results_file = "results/traffic_metrics_latest.json"
-        with open(results_file, "w") as f:
-            json.dump(kpis, f, indent=2)
-        print(f"\n✓ Saved structured metrics to: {results_file}")
-
+        with experiment_network(network_state) as net:
+            entered = True
+            print(f'Topology started: {len(net.hosts)} hosts, {len(net.switches)} switches')
+            manager = TrafficManager(net)
+            try:
+                manager.setup_services()
+                services = manager.services
+                print('HTTP and both iperf3 servers verified listening.')
+                report['stage'] = 'measurements'
+                kpis = manager.collect_all_kpis(icmp_count=3, http_count=5, iperf_duration=3)
+                report.update(kpis)
+                print_measurements(kpis)
+                if not kpis['success']:
+                    report['errors'].append('One or more baseline probes failed; inspect measurement records')
+                exit_code = 0 if kpis['success'] else 1
+                report['stage'] = 'completed'
+            finally:
+                try:
+                    manager.teardown_services()
+                except Exception as exc:
+                    cleanup_errors.append(str(exc))
+                    raise
+    except KeyboardInterrupt:
+        report['errors'].append('Experiment interrupted')
+        exit_code = 130
+    except Exception as exc:
+        report['errors'].append(f'{type(exc).__name__}: {exc}')
+        exit_code = 1
     finally:
-        if manager:
-            print("\nTearing down background services...")
-            manager.teardown_services()
-        if net:
-            print("Stopping Mininet network...")
-            net.stop()
-        print("Done. Cleaned up successfully.\n")
+        # Report verified teardown separately from probe success.
+        report['cleanup_success'] = (network_state.get('cleanup_success', False)
+                                     and not cleanup_errors
+                                     and all(s.process.poll() is not None for s in services))
+        report['errors'].extend(cleanup_errors)
+        report['success'] = exit_code == 0 and report['cleanup_success']
+        report['network_started'] = entered
+        report['service_pids'] = [s.pid for s in services]
+        if not report['success'] and exit_code == 0:
+            exit_code = 1
+        path = save_results(report, output_dir)
+        print(f'\nSaved experiment report: {path}')
+        for error in report['errors']:
+            print(f'ERROR: {error}', file=sys.stderr)
+        print('Experiment PASS' if report['success'] else 'Experiment FAILED')
+    return exit_code
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output-dir', type=Path,
+                        default=Path(__file__).resolve().parents[1] / 'results')
+    args = parser.parse_args()
+    if os.geteuid() != 0:
+        print('Live Mininet experiments require sudo.', file=sys.stderr)
+        return 1
+    def interrupted(signum, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, interrupted)
+    return run_traffic_experiment(args.output_dir)
 
 
 if __name__ == '__main__':
-    if os.geteuid() != 0:
-        print("\n[ERROR] Mininet requires root (sudo) privileges.")
-        print("Please run with:")
-        print("    sudo python3 scripts/run_traffic_test.py\n")
-        sys.exit(1)
-    run_traffic_experiment()
+    sys.exit(main())

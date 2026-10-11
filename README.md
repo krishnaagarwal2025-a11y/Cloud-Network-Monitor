@@ -16,13 +16,13 @@ cloud-network-monitor/
 │   ├── topology/           # Mininet multi-tier cloud topology definitions
 │   │   ├── __init__.py
 │   │   └── cloud_topology.py
-│   ├── traffic/            # Traffic generation (ICMP, TCP, HTTP) & tc/netem fault injection
-│   ├── monitoring/         # Metric collection agents and Prometheus exporter
-│   └── analysis/           # Threshold, EWMA, Z-score, and Isolation Forest detectors
+│   ├── traffic/            # ICMP, HTTP, iperf3 probes and owned child processes
+│   ├── monitoring/         # Empty scaffold; Phase 4 pending
+│   └── analysis/           # Empty scaffold; later phases pending
 ├── scripts/                # Execution and automation scripts
 │   ├── setup_env.sh        # Dependency installer and environment initializer
-│   ├── run_experiment.py   # Repeatable experiment execution runner
-│   └── start_monitoring.sh # Monitoring stack management
+│   ├── run_traffic_test.py # One Phase 3 measurement cycle and JSON report
+│   └── verify_phase3.py    # Tests, two live experiments, evidence checks
 └── tests/                  # Verification and unit tests
     └── test_topology.py    # Topology structural & live integration tests
 ```
@@ -34,36 +34,18 @@ cloud-network-monitor/
 The testbed models a production multi-tier cloud architecture with distinct, measurable network segments:
 
 ```text
-       [ client ] (10.0.0.10)
-           │
-      ( s_client )
-           │
-           │  <-- seg_client_edge: 100 Mbps, 5ms delay (WAN access)
-           │
-       ( s_edge )
-           │
-      [ edge_gw ] (10.0.0.1)
-           │
-           │  <-- seg_edge_lb: 1 Gbps, 2ms delay (Perimeter / DMZ)
-           │
-        ( s_lb )
-           │
-        [ lb ] (10.0.0.2)
-           │
-           │  <-- seg_lb_app: 1 Gbps, 1ms delay (Service Mesh)
-           │
-       ( s_app )
-      ┌────┼────┐
-      │    │    │
-  [web_srv] [api_srv] [auth_srv]  (10.0.0.11 / 12 / 13)
-      └────┬────┘
-           │
-           │  <-- seg_app_db: 1 Gbps, 1ms delay (Data Tier backend)
-           │
-        ( s_db )
-           │
-       [ db_srv ] (10.0.0.20)
+ s_client ---- s_edge ---- s_lb ---- s_app ---- s_db
+     |            |          |        |          |
+   client       edge_gw       lb       |        db_srv
+                              web_srv, api_srv, auth_srv
+                              (each attached to s_app)
 ```
+
+The four switch-to-switch links define the monitored segments. All hosts
+share one IPv4 subnet and communicate through OVS learning bridges.
+`edge_gw` and `lb` are logical role names: they do not currently implement
+routing, NAT, reverse proxying, or load balancing. The HTTP service is a
+small availability endpoint, not a complete cloud application.
 
 ### Node Addressing & Roles
 
@@ -137,99 +119,193 @@ The test validates:
 - [x] Tier-to-tier reachability and 0% packet loss on `pingall`.
 - [x] Clean network teardown.
 
-### 3. Cleaning Up Mininet
+### 3. Network ownership and cleanup
 
-If Mininet or Open vSwitch ever terminates unexpectedly or interfaces remain:
+The Phase 3 runner and live tests use `src/topology/lifecycle.py` around the
+existing topology. It locks concurrent project runs, refuses conflicting
+project-named interfaces/bridges, and stops the network it created in a
+`finally` block. It then checks that project-named root-namespace interfaces
+and OVS bridges are gone. Partial network construction also has a teardown
+path. These privileged paths passed the Phase 3 acceptance run on the host.
 
-```bash
-sudo mn -c
-```
+Do not run broad process cleanup or `mn -c` automatically on a shared computer.
+If startup reports a conflict, inspect the named resource before deciding
+whether it belongs to an earlier project run. Forced termination (SIGKILL),
+a machine crash, or an OVS failure can still require manual recovery.
 
 ---
 
-## Phase 3: Traffic Generation & KPI Measurement
+## Phase 3: Traffic generation and KPI measurement
 
-Phase 3 introduces a lightweight measurement and probing layer on top of the cloud topology without requiring external agents or daemons:
+### Implementation
 
-### 1. Probing & Measurement Capabilities
+- ICMP probes cover client to edge, web, API and DB, plus web to DB.
+- HTTP probes use curl against a dedicated page served on `web_srv:8080`.
+  Proxy environment variables are bypassed for these lab probes.
+- iperf3 servers run on both `web_srv:5201` and `db_srv:5201`.
+- Services are owned `Popen` children. Readiness checks match the listening
+  socket to that child's file descriptors within its network namespace.
+  Starting or stopping a server never kills another process by name or port.
+- Shutdown sends TERM to each owned child, waits, and uses KILL only on that
+  same child if necessary. Probe execution is bounded and children are reaped
+  on timeout or interruption.
+- The runner collects one measurement cycle. Tables, summary and saved JSON
+  all derive from that cycle. A baseline run fails on missing/failed probes,
+  any measured packet loss, HTTP status other than 200, or invalid throughput.
+- Missing RTT, throughput and optional iperf statistics are JSON `null`.
+  Every probe includes success, exit status, raw output and diagnostic fields.
+  A measured 100% packet loss remains 100%; a command that produced no loss
+  statistics reports `null`. HTTP attempt timings can exist even on failure;
+  the summary response time is unavailable if any HTTP request failed.
+- Ping `mdev` is RTT standard deviation, used here as latency variation. It
+  is not an inter-packet-delay jitter measurement.
 
-- **ICMP Monitoring (`src/traffic/icmp.py`)**:
-  - Probes key paths (`client -> edge_gw`, `client -> web_srv`, `client -> api_srv`, `client -> db_srv`, `web_srv -> db_srv`).
-  - Measures `rtt_min_ms`, `rtt_avg_ms`, `rtt_max_ms`, `rtt_mdev_ms` (jitter), and `packet_loss_percent`.
-- **HTTP Monitoring (`src/traffic/http.py`)**:
-  - Manages background HTTP service on `web_srv:8080`.
-  - Probes HTTP response time, TCP connect time, and status codes using `curl`.
-  - Records `http_response_time_ms`, `http_status`, and `http_success`.
-- **Throughput Testing (`src/traffic/iperf.py`)**:
-  - Manages `iperf3` servers on `web_srv:5201` and `db_srv:5201`.
-  - Directly executes `iperf3 -c <ip> -J` to capture precise machine-readable JSON metrics (`throughput_mbps`, `retransmits`, `mean_rtt_ms`).
-- **Orchestration & Structured Metrics (`src/traffic/manager.py`)**:
-  - `TrafficManager` coordinates lifecycle, executes test suites, and outputs structured dictionary/JSON ready for Prometheus exporters.
+The topology's configured delays apply in both travel directions. Historical
+README output was illustrative and unverified, and has been removed. No
+sample table should be treated as evidence of a live experiment.
 
-### 2. How to Run Phase 3
+### Dependencies
 
-#### Run Unit & Integration Tests:
+Phase 3 uses Python's standard library plus the installed system Mininet
+package, OVS, ping, curl, iperf3 and `tc`. The scientific packages listed in
+`requirements.txt` are not needed for Phase 3. Do not install that entire
+list merely to run these checks. The existing setup script is a broad initial
+installer, not a required step on an already configured machine.
+
+### Run the tests and experiments
+
+From the repository directory, run the unprivileged suite first:
+
 ```bash
-# Unit parsing tests (runs unprivileged):
-python3 -m unittest discover tests
-
-# Live Mininet traffic integration test (requires sudo):
-sudo python3 tests/test_traffic.py
+python3 -m unittest discover -v -s tests
 ```
 
-#### Run Live Traffic Experiment & KPI Measurement:
+Two Mininet tests skip without root. Local subprocess regression tests open
+loopback sockets and run real HTTP/iperf3 processes; they require socket access
+but no sudo. They are distinct from Mininet integration tests.
+
+For the complete Phase 3 acceptance check:
+
 ```bash
+sudo python3 scripts/verify_phase3.py
+```
+
+This creates temporary Mininet interfaces, OVS bridges, HTTP and iperf3
+processes, and generates network traffic. It runs all tests with root,
+then two full experiments. Each experiment tears down its own resources.
+The verifier checks genuine JSON records, summary consistency, child-process
+exit and successful cleanup. A failure stops the sequence and retains logs.
+
+Individual commands remain available:
+
+```bash
+sudo python3 tests/test_topology.py
+sudo python3 tests/test_traffic.py
 sudo python3 scripts/run_traffic_test.py
 ```
 
-### 3. Example Measurement Output
+Reports are written to unique `results/traffic_metrics_<time>_<id>.json` files,
+or the directory selected with `--output-dir`. Previous reports are preserved.
+The acceptance command saves logs, both reports and `verification.json` in a
+unique `results/phase3_verification_<time>/` directory. Results are Git-ignored.
+A zero exit code means all baseline checks and verified cleanup passed;
+errors return 1, and interruption returns 130. Failure reports are saved too.
 
-```text
-======================================================================
- Cloud Application Network Monitoring - Phase 3 Traffic & KPIs
-======================================================================
+### Current verification status
 
-[1/5] Instantiating and starting Mininet cloud topology...
-  ✓ Topology started successfully (7 hosts, 5 OVSBridge switches)
+Phase 3 live acceptance passed: 37 tests with no skips, two complete traffic
+experiments, consistent saved measurements and verified cleanup. See
+[the Phase 3 engineering record](docs/phase3-status.md) for evidence paths.
 
-[2/5] Setting up background application services...
-  ✓ HTTP server running on web_srv:8080
-  ✓ iperf3 servers running on web_srv:5201 and db_srv:5201
+## Phase 4: Prometheus collection
 
-[3/5] Measuring ICMP Ping Latency & Packet Loss...
-Path               | Target IP | Packets | Loss | Avg RTT | Min RTT | Max RTT | Jitter  | Status
--------------------+-----------+---------+------+---------+---------+---------+---------+-------
-client -> edge_gw  | 10.0.0.1  | 3/3     | 0.0% | 5.21 ms | 5.12 ms | 5.34 ms | 0.09 ms | PASS  
-client -> web_srv  | 10.0.0.11 | 3/3     | 0.0% | 8.35 ms | 8.21 ms | 8.52 ms | 0.13 ms | PASS  
-client -> api_srv  | 10.0.0.12 | 3/3     | 0.0% | 8.31 ms | 8.19 ms | 8.48 ms | 0.12 ms | PASS  
-client -> db_srv   | 10.0.0.20 | 3/3     | 0.0% | 9.42 ms | 9.30 ms | 9.61 ms | 0.14 ms | PASS  
-web_srv -> db_srv  | 10.0.0.20 | 3/3     | 0.0% | 1.15 ms | 1.08 ms | 1.22 ms | 0.06 ms | PASS  
+The metrics endpoint publishes the latest complete cycle while a single
+measurement loop runs probes sequentially. Scrapes do not trigger additional
+iperf traffic. Snapshots update atomically, so a scrape cannot mix two cycles.
 
-[4/5] Measuring HTTP Response Time (client -> web_srv:8080)...
-Request  | Source -> Target | URL                     | Status Code | Connect Time | Total Time | Result
----------+------------------+-------------------------+-------------+--------------+------------+-------
-Req #1   | client -> web_srv| http://10.0.0.11:8080/  | 200         | 8.24 ms      | 15.60 ms   | 200 OK
-Req #2   | client -> web_srv| http://10.0.0.11:8080/  | 200         | 8.18 ms      | 14.85 ms   | 200 OK
-Req #3   | client -> web_srv| http://10.0.0.11:8080/  | 200         | 8.12 ms      | 14.72 ms   | 200 OK
-Req #4   | client -> web_srv| http://10.0.0.11:8080/  | 200         | 8.20 ms      | 14.90 ms   | 200 OK
-Req #5   | client -> web_srv| http://10.0.0.11:8080/  | 200         | 8.15 ms      | 14.65 ms   | 200 OK
-
-[5/5] Measuring TCP Throughput with iperf3...
-Path              | Target IP | Duration | Throughput  | Retransmits | Mean RTT | Status
-------------------+-----------+----------+-------------+-------------+----------+-------
-client -> web_srv | 10.0.0.11 | 3.0 s    | 98.40 Mbps  | 0           | 8.25 ms  | PASS  
-client -> db_srv  | 10.0.0.20 | 3.0 s    | 98.25 Mbps  | 0           | 9.35 ms  | PASS  
-
-======================================================================
- Summary KPI Metrics (Ready for Prometheus Telemetry Exporter)
-======================================================================
-  • ping_latency_ms:        8.35 ms
-  • packet_loss_percent:    0.0 %
-  • http_response_time_ms:  14.94 ms
-  • http_success:           1
-  • throughput_mbps:        98.40 Mbps
-======================================================================
-
-✓ Saved structured metrics to: results/traffic_metrics_latest.json
+```bash
+sudo python3 scripts/run_monitoring.py
 ```
 
+This starts the project network, exporter on `127.0.0.1:9200`, and a separate
+Prometheus instance on `127.0.0.1:9091`. It uses the existing installed binary,
+leaves the system Prometheus service unchanged, and stores its own logs and
+time-series data under a unique `results/monitoring_<time>/` directory.
+Ctrl+C stops the owned services and network. Use `--cycles 3` for a finite run.
+The default five-second interval is idle time *after* a complete collection;
+probing adds its own duration. TCP throughput tests actively load the network.
+
+The host already uses ports 9090 and 9100 for system services. The new ports
+avoid those conflicts. Phase 4 live baseline, application failure and recovery
+acceptance passed; see the evidence in `docs/phase4-status.md`.
+
+```bash
+# Full live acceptance: baseline -> owned HTTP service down -> recovery.
+sudo python3 scripts/verify_phase4.py
+
+# Optional unprivileged check of a previously saved genuine report:
+python3 scripts/verify_phase4.py --recorded-report /absolute/path/to/traffic_metrics_REPORT.json
+```
+
+The recorded-report mode verifies ingestion only. It preserves original probe
+timestamps and cannot establish continuous live collection or recovery.
+
+[Metric definitions, failure semantics and verification status](docs/phase4-status.md)
+are documented separately.
+
+
+## Phase 5: Grafana dashboards
+
+The dashboard and datasource are provisioned from `config/grafana/`. The
+Grafana OSS binary is pinned, checksum-verified and installed inside `.runtime/`.
+The runtime and generated data are Git-ignored. Installation changes no system
+packages or services. On a new machine, approve the approximately 461 MB download
+before running `python3 scripts/install_grafana.py`.
+
+```bash
+sudo python3 scripts/run_monitoring.py --grafana
+```
+
+Open `http://127.0.0.1:3000/d/cloud-network-overview`. This localhost instance
+provides anonymous read-only viewing, uses a generated admin password, and
+loads its datasource and dashboard automatically. Stop with Ctrl+C. Port
+conflicts fail without terminating the existing listener.
+
+The dashboard includes exporter reachability, HTTP availability, baseline
+checks, probe age, path RTT, loss, HTTP timings, throughput, probe availability
+timeline, RTT variation, retransmissions and collection status. Missing values
+remain gaps. Baseline checks describe current probe results; statistical
+anomaly detection and injected-fault timelines are added in later phases.
+
+```bash
+sudo python3 scripts/verify_phase5.py
+```
+
+This verifies provisioned dashboard queries during real baseline, application
+failure and recovery, and saves their returned data. For unprivileged UI/data
+verification, `--recorded-directory` can replay a completed Phase 4 evidence
+directory. Playback uses genuine saved records with their original measurement
+timestamps; it must not be presented as newly generated live traffic.
+
+## Phase 6: Fault injection, anomaly detection and segment localisation
+
+Controlled network faults (latency, packet loss, bandwidth restrictions) are
+injected using Linux `tc`/`netem` via `FaultInjector` on specific Mininet segment
+links. All active impairments are tracked and automatically restored via context
+manager guarantees.
+
+### Detection & Localisation
+- **Anomaly Detection**: Combines three complementary strategies:
+  1. Static / Configurable Thresholds: domain bounds on latency, loss, response time, and throughput.
+  2. EWMA (Exponentially Weighted Moving Average): adaptive trend tracking with dynamic mean absolute deviation.
+  3. Z-score: sliding-window statistical deviation detection with zero-variance protection.
+- **Boolean Network Tomography**: Infers likely faulty segments from end-to-end path measurements using the Axiom of Good Paths (healthy link elimination) and intersection of degraded paths. Topologically indistinguishable segments are honestly reported with ambiguous candidate sets and fractional confidence.
+- **Grafana Visualization**: A dedicated *Anomaly Detection & Fault Localisation* dashboard is provisioned at `http://127.0.0.1:3000/d/cloud-anomaly-detection`.
+
+```bash
+# Unprivileged test suite (validates detectors, tomography, fault injector logic, and dashboard contracts)
+python3 -m unittest discover -v -s tests
+
+# Live Mininet Phase 6 acceptance run (requires root)
+sudo python3 scripts/verify_phase6.py
+```

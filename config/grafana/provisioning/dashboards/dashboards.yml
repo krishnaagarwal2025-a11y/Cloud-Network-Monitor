@@ -1,0 +1,11 @@
+apiVersion: 1
+providers:
+  - name: Cloud Network Monitor
+    orgId: 1
+    folder: Networks Lab
+    type: file
+    disableDeletion: true
+    updateIntervalSeconds: 10
+    allowUiUpdates: false
+    options:
+      path: $CLOUD_DASHBOARDS_DIR

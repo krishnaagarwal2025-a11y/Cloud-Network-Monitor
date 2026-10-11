@@ -5,7 +5,8 @@ global:
 scrape_configs:
   - job_name: "cloud-network-monitor"
     static_configs:
-      - targets: ["localhost:9100"]
+      # Port 9100 is already occupied by a host service on the development PC.
+      - targets: ["127.0.0.1:9200"]
         labels:
           tier: "monitoring"
           node: "network-exporter"

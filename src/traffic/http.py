@@ -9,6 +9,9 @@ and measures response time, connect time, and HTTP status codes using curl.
 from dataclasses import dataclass, asdict
 import re
 import time
+import sys
+import math
+from src.traffic.process import start_service, run_probe
 from typing import Optional, Dict, Any
 
 
@@ -18,10 +21,12 @@ class HTTPMeasurement:
     target: str
     url: str
     http_status: int
-    response_time_ms: float
-    connect_time_ms: float
+    response_time_ms: Optional[float]
+    connect_time_ms: Optional[float]
     success: bool
     raw_output: str
+    exit_code: Optional[int] = None
+    error_message: str = ""
     timestamp: float = 0.0
 
     def __post_init__(self):
@@ -38,8 +43,8 @@ def parse_curl_output(raw_output: str) -> Dict[str, Any]:
     status=200|time_total=0.012345|time_connect=0.004567
     """
     http_status = 0
-    response_time_ms = 0.0
-    connect_time_ms = 0.0
+    response_time_ms = None
+    connect_time_ms = None
 
     match_status = re.search(r'status=(\d+)', raw_output)
     if match_status:
@@ -54,16 +59,23 @@ def parse_curl_output(raw_output: str) -> Dict[str, Any]:
             # Convert seconds to milliseconds
             response_time_ms = round(float(match_total.group(1)) * 1000.0, 3)
         except ValueError:
-            response_time_ms = 0.0
+            response_time_ms = None
 
     match_connect = re.search(r'time_connect=([0-9.]+)', raw_output)
     if match_connect:
         try:
             connect_time_ms = round(float(match_connect.group(1)) * 1000.0, 3)
         except ValueError:
-            connect_time_ms = 0.0
+            connect_time_ms = None
 
-    success = (200 <= http_status < 400)
+    for name, value in [('total', response_time_ms), ('connect', connect_time_ms)]:
+        if value is not None and not math.isfinite(value):
+            if name == 'total':
+                response_time_ms = None
+            else:
+                connect_time_ms = None
+    success = (200 <= http_status < 400 and response_time_ms is not None
+               and connect_time_ms is not None)
 
     return {
         'http_status': http_status,
@@ -73,36 +85,27 @@ def parse_curl_output(raw_output: str) -> Dict[str, Any]:
     }
 
 
-def start_http_server(host_node, port: int = 8080) -> Optional[int]:
-    """
-    Start a lightweight HTTP server on the given Mininet host node in the background.
-    Returns the process PID.
-    """
-    # Kill any existing server on this port
-    stop_http_server(host_node, port=port)
-
-    # Start built-in http.server
-    cmd = (
-        f"python3 -m http.server {port} --bind 0.0.0.0 > /tmp/http_server_{port}.log 2>&1 & echo $!"
-    )
-    pid_str = host_node.cmd(cmd).strip().split()[-1]
-    time.sleep(0.5)  # Allow process to bind socket
-
+def start_http_server(host_node, port: int = 8080):
+    """Start an owned child serving a fixed, non-sensitive response directory."""
+    import tempfile
+    from pathlib import Path
+    directory = tempfile.TemporaryDirectory(prefix='cloud-monitor-http-')
     try:
-        return int(pid_str)
-    except (ValueError, IndexError):
-        return None
+        Path(directory.name, 'index.html').write_text('cloud-network-monitor OK\n')
+        service = start_service(host_node, [sys.executable, '-m', 'http.server',
+                                str(port), '--bind', host_node.IP(),
+                                '--directory', directory.name], port)
+        service.directory = directory
+        return service
+    except BaseException:
+        directory.cleanup()
+        raise
 
 
-def stop_http_server(host_node, pid: Optional[int] = None, port: int = 8080):
-    """
-    Stop the HTTP server on the given Mininet host node.
-    """
-    if pid:
-        host_node.cmd(f"kill -9 {pid} 2>/dev/null || true")
-    # Kill any process listening on the port
-    host_node.cmd(f"pkill -9 -f 'http.server {port}' 2>/dev/null || true")
-    host_node.cmd(f"fuser -k {port}/tcp 2>/dev/null || true")
+def stop_http_server(host_node, service):
+    """Stop only the child returned by start_http_server."""
+    service.stop()
+    service.directory.cleanup()
 
 
 def measure_http(
@@ -114,18 +117,21 @@ def measure_http(
     """
     Probe the HTTP URL from source_node using curl and return an HTTPMeasurement.
     """
+    if timeout <= 0:
+        raise ValueError('HTTP timeout must be positive')
     src_name = getattr(source_node, 'name', str(source_node))
     tgt_name = target_name or url
 
     # Format output with status, total time, and connect time
     format_str = "status=%{http_code}|time_total=%{time_total}|time_connect=%{time_connect}"
-    cmd = (
-        f'curl -s -o /dev/null -w "{format_str}" '
-        f'--connect-timeout {timeout} -m {timeout} "{url}"'
-    )
-    raw_output = source_node.cmd(cmd)
-
+    argv = ['curl', '--silent', '--show-error', '--noproxy', '*',
+            '-o', '/dev/null', '-w', format_str, '--connect-timeout', str(timeout),
+            '-m', str(timeout), url]
+    raw_output, exit_code, error = run_probe(source_node, argv, timeout + 2)
     parsed = parse_curl_output(raw_output)
+    parsed['success'] = parsed['success'] and exit_code == 0 and not error
+    if not parsed['success'] and not error:
+        error = f"HTTP status {parsed['http_status']}"
 
     return HTTPMeasurement(
         source=src_name,
@@ -136,4 +142,6 @@ def measure_http(
         connect_time_ms=parsed['connect_time_ms'],
         success=parsed['success'],
         raw_output=raw_output.strip(),
+        exit_code=exit_code,
+        error_message=error,
     )

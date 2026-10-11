@@ -12,18 +12,21 @@ Verifies:
 import os
 import sys
 import unittest
+from contextlib import ExitStack
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.topology.cloud_topology import (
     CloudTopology,
-    create_network,
     HOST_CONFIGS,
     SWITCH_CONFIGS,
     HOST_ATTACHMENTS,
     SEGMENTS,
 )
+
+
+from src.topology.lifecycle import experiment_network
 
 
 class TestCloudTopologyStructure(unittest.TestCase):
@@ -103,6 +106,16 @@ class TestCloudTopologyStructure(unittest.TestCase):
                 f"DPID mismatch for {switch_name}: {node_info.get('dpid')} != {expected_conf['dpid']}",
             )
 
+    def test_link_qos_and_host_macs(self):
+        for host, config in HOST_CONFIGS.items():
+            self.assertEqual(self.topo.nodeInfo(host)['mac'], config['mac'])
+            info = self.topo.linkInfo(host, HOST_ATTACHMENTS[host])
+            self.assertEqual((info['bw'], info['delay'], info['loss']), (1000, '0.1ms', 0))
+        for config in SEGMENTS.values():
+            info = self.topo.linkInfo(config['node1'], config['node2'])
+            for field in ('bw', 'delay', 'loss', 'max_queue_size'):
+                self.assertEqual(info[field], config[field])
+
 
 class TestCloudTopologyLiveNetwork(unittest.TestCase):
     """
@@ -117,11 +130,11 @@ class TestCloudTopologyLiveNetwork(unittest.TestCase):
         3. Hosts can communicate where expected.
         4. The topology can start and cleanly shut down.
         """
+        network = ExitStack()
         net = None
         try:
             print("\n*** Starting live Mininet testbed (controllerless OVSBridge mode)...")
-            net = create_network()
-            net.start()
+            net = network.enter_context(experiment_network())
 
             # Verify no external OpenFlow controller is configured or required
             self.assertEqual(
@@ -206,7 +219,7 @@ class TestCloudTopologyLiveNetwork(unittest.TestCase):
         finally:
             if net is not None:
                 print("*** Cleanly stopping Mininet network...")
-                net.stop()
+                network.close()
                 print("*** Network stopped successfully.")
 
 
@@ -220,7 +233,7 @@ def run_tests():
     
     if os.geteuid() != 0:
         print("\n" + "=" * 60)
-        print("NOTE: Structural verification tests PASSED.")
+        print("NOTE: Live tests skipped; see test results above for structural status.")
         print("To run the live Mininet communication and lifecycle tests,")
         print("execute with sudo:")
         print("    sudo python3 tests/test_topology.py")

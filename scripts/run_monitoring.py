@@ -33,9 +33,21 @@ def run(cycles=0, interval=5, exporter_port=9200, prometheus_port=9091, output_d
     try:
         with ExitStack() as stack:
             stack.enter_context(metrics_server(collector, exporter_port))
-            stack.enter_context(prometheus_server(directory / 'prometheus', exporter_port, prometheus_port))
+            try:
+                from src.monitoring.prometheus import get_json
+                get_json(f'http://127.0.0.1:{prometheus_port}/api/v1/status/buildinfo')
+                print(f'Prometheus already active on port {prometheus_port}; reusing existing instance.', flush=True)
+            except Exception:
+                stack.enter_context(prometheus_server(directory / 'prometheus', exporter_port, prometheus_port))
+
             if grafana:
-                stack.enter_context(grafana_server(directory / 'grafana', prometheus_port, grafana_port))
+                try:
+                    from src.monitoring.grafana import api
+                    api(grafana_port, '/api/health')
+                    print(f'Grafana already active on port {grafana_port}; reusing existing instance.', flush=True)
+                except Exception:
+                    stack.enter_context(grafana_server(directory / 'grafana', prometheus_port, grafana_port))
+
             net = stack.enter_context(experiment_network(state))
             manager = TrafficManager(net)
             stack.callback(manager.teardown_services)
@@ -43,7 +55,8 @@ def run(cycles=0, interval=5, exporter_port=9200, prometheus_port=9091, output_d
             print(f'Metrics: http://127.0.0.1:{exporter_port}/metrics', flush=True)
             print(f'Prometheus: http://127.0.0.1:{prometheus_port}', flush=True)
             if grafana:
-                print(f'Dashboard: http://127.0.0.1:{grafana_port}/d/{DASHBOARD_UID}', flush=True)
+                print(f'Dashboard (Overview): http://127.0.0.1:{grafana_port}/d/{DASHBOARD_UID}', flush=True)
+                print(f'Dashboard (Anomalies): http://127.0.0.1:{grafana_port}/d/cloud-anomaly-detection', flush=True)
             print(f'Measurements: {directory}', flush=True)
             while cycles == 0 or completed < cycles:
                 start = time.monotonic()
@@ -88,6 +101,7 @@ def main():
     def interrupted(signum, frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, interrupted)
+    signal.signal(signal.SIGHUP, interrupted)
     return run(**vars(args))
 
 

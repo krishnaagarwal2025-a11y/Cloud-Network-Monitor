@@ -211,3 +211,53 @@ def metrics_server(collector, port=9200):
         server.shutdown()
         server.server_close()
         thread.join(timeout=3)
+
+
+def main():
+    import argparse
+    import json
+    from pathlib import Path
+    import sys
+
+    root = Path(__file__).resolve().parents[2]
+    parser = argparse.ArgumentParser(description='Run standalone Prometheus metrics exporter')
+    parser.add_argument('--port', type=int, default=9200, help='Port to expose metrics on (default: 9200)')
+    parser.add_argument('--report', type=Path, help='Specific JSON report to load; defaults to latest in results/')
+    parser.add_argument('--results-dir', type=Path, default=root / 'results', help='Directory to monitor for reports')
+    args = parser.parse_args()
+
+    collector = MeasurementCollector()
+    report_file = args.report
+    if not report_file and args.results_dir.exists():
+        candidates = sorted(args.results_dir.glob('**/traffic_metrics_*.json'), key=lambda p: p.stat().st_mtime)
+        if candidates:
+            report_file = candidates[-1]
+
+    if report_file and report_file.is_file():
+        try:
+            data = json.loads(report_file.read_text())
+            collector.update(data, 0.0)
+            print(f'Loaded measurement report: {report_file}', flush=True)
+        except Exception as exc:
+            print(f'Warning: failed to load {report_file}: {exc}', file=sys.stderr)
+
+    print(f'Serving Prometheus metrics on http://127.0.0.1:{args.port}/metrics', flush=True)
+    with metrics_server(collector, args.port):
+        try:
+            while True:
+                time.sleep(1)
+                if not args.report and args.results_dir.exists():
+                    candidates = sorted(args.results_dir.glob('**/traffic_metrics_*.json'), key=lambda p: p.stat().st_mtime)
+                    if candidates and candidates[-1] != report_file:
+                        report_file = candidates[-1]
+                        try:
+                            data = json.loads(report_file.read_text())
+                            collector.update(data, 0.0)
+                        except Exception:
+                            pass
+        except KeyboardInterrupt:
+            print('\nExporter stopped.', flush=True)
+
+
+if __name__ == '__main__':
+    main()

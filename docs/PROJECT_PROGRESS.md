@@ -63,41 +63,89 @@ Result: **73 tests, 71 passed, 2 skipped (root-only live Mininet tests)**
   - `config/grafana/dashboards/anomaly-detection.json`: Dedicated dashboard for anomaly tracking and tomography candidate visualization.
   - `scripts/verify_phase6.py`: Acceptance script supporting both live Mininet and simulated verification.
 - **Simulated Evidence**: `results/phase6_verification_1791735855970990570/verification.json`
-- **Execution Mode**: `simulated_fault_injection`
-- **Verification Stages**:
+- **Execution Mode**: `simulated_fault_injection` (simulated traffic and synthetic impairments; verifies detector math, tomography reasoning, exporter metrics, and Prometheus queries)
+- **Live Mininet Status**: **AWAITING USER INTERACTIVE EXECUTION** (`sudo python3 scripts/verify_phase6.py`).
+- **Simulated Verification Stages**:
   1. **Stage 1 (Baseline)**: 0 anomalies, status = `healthy`, 0 fault candidates.
   2. **Stage 2 (`seg_client_edge` +50ms latency)**: Flagged by detectors; localiser identified `['seg_client_edge']` with confidence 1.0; ground truth evaluation: `exact_match`.
   3. **Stage 3 (`seg_app_db` 25% loss)**: Flagged by detectors; localiser identified `['seg_app_db']` with confidence 1.0; ground truth evaluation: `exact_match`.
   4. **Stage 4 (`seg_edge_lb` +40ms latency)**: Localiser reported `is_ambiguous: true`, candidates `['seg_edge_lb', 'seg_lb_app']` with confidence 0.5; ground truth evaluation: `ambiguous_contains_target`.
   5. **Stage 5 (Recovery)**: Restored baseline, 0 anomalies, status = `healthy`.
-- **Status**: **PIPELINE VERIFIED**.
 
 ---
 
-## 4. Live Mininet Execution Instructions
+## 4. Verification Mode Distinction
 
-For full live network verification inside Mininet kernel namespaces:
-
-```bash
-# Phase 4 Live Acceptance (Prometheus baseline, outage, recovery)
-sudo python3 scripts/verify_phase4.py
-
-# Phase 5 Live Acceptance (Grafana dashboard panel queries on live network)
-sudo python3 scripts/verify_phase5.py
-
-# Phase 6 Live Acceptance (Linux tc/netem fault injection, anomaly detection, tomography)
-sudo python3 scripts/verify_phase6.py
-
-# Continuous Live Monitoring with Grafana UI (http://127.0.0.1:3000)
-sudo python3 scripts/run_monitoring.py --grafana
-```
+| Level | Execution Mode | Privilege | Network Scope | Current Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Unit Tests** | `unittest` | Unprivileged | In-process, mock & loopback sockets | **PASSED** (71 passed, 2 skipped) |
+| **Phase 5 Dashboard** | `recorded_measurement_playback` | Unprivileged | Real Exporter, Prometheus, Grafana | **PASSED** (`results/phase5_verification_...`) |
+| **Phase 6 Pipeline** | `simulated_fault_injection` | Unprivileged | Real Exporter, Prometheus, Detectors, Tomography | **PASSED** (`results/phase6_verification_...`) |
+| **Live Mininet Phase 4** | `live_mininet` | Requires `sudo` | Linux namespaces, OVS learning bridges, real curl/iperf3 | **PASSED ON RECORD** (`results/phase4_verification_...`) |
+| **Live Mininet Phase 5** | `live_mininet` | Requires `sudo` | Live network + real dashboard queries | **Ready to run** (`sudo python3 scripts/verify_phase5.py`) |
+| **Live Mininet Phase 6** | `live_mininet` | Requires `sudo` | Live `tc`/`netem` kernel QoS manipulation | **Ready to run** (`sudo python3 scripts/verify_phase6.py`) |
 
 ---
 
-## 5. Environment & Operational Notes
+## 5. Live Acceptance & Evaluation Checklist
+
+### A. Live Phase 6 Verification Script (`sudo python3 scripts/verify_phase6.py`)
+- [ ] **Stage 1 (Clean Baseline)**:
+  - All 5 ICMP paths report 0% loss and expected baseline RTTs (~10ms to edge, ~16ms to web/API, ~18ms to DB, ~2ms web-to-db).
+  - HTTP status 200, throughput ~90-95 Mbps.
+  - Zero anomalies detected; Tomography status is `healthy`.
+- [ ] **Stage 2 (Injected Latency on `seg_client_edge`)**:
+  - `tc netem delay 50ms` applied on `s_client <-> s_edge`.
+  - All 4 client paths show +50ms elevated latency (~60-70ms); `web_srv -> db_srv` remains nominal (~2ms).
+  - Detectors flag latency anomaly; Tomography eliminates `seg_app_db` and localises `seg_client_edge` (`exact_match`, confidence 1.0).
+  - Segments restored to baseline QoS.
+- [ ] **Stage 3 (Injected Packet Loss on `seg_app_db`)**:
+  - `tc netem loss 25%` applied on `s_app <-> s_db`.
+  - `client -> db_srv` and `web_srv -> db_srv` experience ~25% loss; other paths remain 0% loss.
+  - Detectors flag loss anomaly; Tomography localises `seg_app_db` (`exact_match`, confidence 1.0).
+  - Segments restored to baseline QoS.
+- [ ] **Stage 4 (Ambiguous Core Segment on `seg_edge_lb`)**:
+  - `tc netem delay 40ms` applied on `s_edge <-> s_lb`.
+  - `client -> web_srv`, `api_srv`, `db_srv` are elevated; `client -> edge_gw` and `web_srv -> db_srv` are clean.
+  - Tomography honestly reports `is_ambiguous: true`, candidates `['seg_edge_lb', 'seg_lb_app']`, confidence 0.5 (`ambiguous_contains_target`).
+  - Segments restored to baseline QoS.
+- [ ] **Stage 5 (Post-Recovery Baseline)**:
+  - All paths return to nominal baseline; 0 anomalies; status `healthy`.
+- [ ] **Teardown & Cleanup**:
+  - Script prints `network_cleanup_success: True` and exits with code 0.
+  - Verification JSON saved in `results/phase6_verification_<timestamp>/`.
+  - `ovs-vsctl list-br` and `/sys/class/net` confirm zero leftover project bridges/interfaces.
+
+### B. Live Continuous Monitoring & Grafana Dashboard (`sudo python3 scripts/run_monitoring.py --grafana`)
+- [ ] **Services Active**:
+  - Metrics: `http://127.0.0.1:9200/metrics`
+  - Prometheus: `http://127.0.0.1:9091`
+  - Grafana Overview: `http://127.0.0.1:3000/d/cloud-network-overview`
+  - Grafana Anomaly: `http://127.0.0.1:3000/d/cloud-anomaly-detection`
+- [ ] **Overview Dashboard**:
+  - Exporter Reachability = 1 (Green)
+  - Web Availability = 100% (Green)
+  - Baseline Checks = 1 (Green)
+  - Latency and Throughput panels update every cycle (~5-10s).
+- [ ] **Anomaly Detection Dashboard**:
+  - Anomaly Status = NORMAL (Green) during baseline.
+  - Fault Localisation Status = HEALTHY (Green).
+  - Active Anomalies Count = 0.
+- [ ] **Controlled Fault Injection Test (In separate terminal while monitoring runs)**:
+  - Inject fault or stop HTTP service (see instructions).
+  - Anomaly Status switches to ANOMALY (Red).
+  - Fault Localisation Status switches to SEGMENT FAULT (Red).
+  - Inferred Fault Candidate Segments bar chart highlights the affected segment.
+  - Upon fault removal, metrics return to NORMAL / HEALTHY within 1 cycle.
+- [ ] **Clean Termination**:
+  - Pressing `Ctrl+C` in the monitoring terminal gracefully terminates Prometheus, Grafana, HTTP/iperf servers, tears down Mininet, and verifies zero bridge leaks.
+
+---
+
+## 6. Environment & Operational Notes
 
 1. **Terminal Sandbox**:
    - The CLI sandbox daemon abstract unix socket experienced connection resets (`read unix @->@: recvmsg: connection reset by peer`).
-   - Commands run successfully when user approves execution outside sandbox (`BypassSandbox: true`).
+   - Commands run successfully when approved to run outside sandbox (`BypassSandbox: true`).
 2. **Root Privileges**:
    - The user account requires interactive authentication for `sudo`. Unprivileged playback and unit test suites execute without root, while live Mininet interface manipulation requires running with `sudo` in an interactive shell.

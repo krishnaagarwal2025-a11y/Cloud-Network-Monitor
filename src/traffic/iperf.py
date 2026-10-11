@@ -116,6 +116,9 @@ def parse_iperf_json(raw_output: str) -> Dict[str, Any]:
         parsed = _parse_iperf_json(raw_output)
         if any(isinstance(v, float) and not math.isfinite(v) for v in parsed.values()):
             raise ValueError('Non-finite iperf metric')
+        if any(parsed[k] is not None and parsed[k] < 0
+               for k in ('retransmits', 'mean_rtt_ms', 'throughput_mbps', 'duration_sec')):
+            raise ValueError('Negative iperf metric')
         if not parsed['success']:
             parsed['throughput_mbps'] = None
             parsed['duration_sec'] = None

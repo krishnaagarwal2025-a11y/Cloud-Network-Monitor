@@ -2,7 +2,7 @@
   "id": null,
   "uid": "cloud-anomaly-detection",
   "title": "Anomaly Detection & Fault Localisation",
-  "description": "Multi-algorithm anomaly detection (Threshold, EWMA, Z-Score) and Boolean Tomography segment localisation.",
+  "description": "Threshold, EWMA and Z-score anomalies; ICMP-based Boolean tomography. Candidate confidence is a heuristic, not a calibrated probability. Inconclusive means missing or conflicting observations.",
   "tags": [
     "mininet",
     "networks-lab",
@@ -57,16 +57,28 @@
             {
               "type": "value",
               "options": {
-                "0": { "text": "NORMAL", "color": "green" },
-                "1": { "text": "ANOMALY", "color": "red" }
+                "0": {
+                  "text": "NORMAL",
+                  "color": "green"
+                },
+                "1": {
+                  "text": "ANOMALY",
+                  "color": "red"
+                }
               }
             }
           ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "value": null, "color": "green" },
-              { "value": 1, "color": "red" }
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
             ]
           }
         }
@@ -80,7 +92,7 @@
         "type": "prometheus",
         "uid": "cloud-prometheus"
       },
-      "description": "Total count of active anomalies across metrics and paths.",
+      "description": "Findings in the current cycle across detector algorithms; the same event can be counted by multiple algorithms. This metric is a gauge.",
       "gridPos": {
         "x": 6,
         "y": 0,
@@ -102,9 +114,18 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "value": null, "color": "green" },
-              { "value": 1, "color": "orange" },
-              { "value": 3, "color": "red" }
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "orange"
+              },
+              {
+                "value": 3,
+                "color": "red"
+              }
             ]
           }
         }
@@ -112,13 +133,13 @@
     },
     {
       "id": 103,
-      "title": "Fault Localisation Status",
+      "title": "Localisation inference",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
         "uid": "cloud-prometheus"
       },
-      "description": "Network segment fault localisation state.",
+      "description": "Network-only inference: healthy, localised, ambiguous or inconclusive. Application outages alone do not identify segment faults.",
       "gridPos": {
         "x": 12,
         "y": 0,
@@ -128,8 +149,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "cloud_fault_detected",
-          "legendFormat": "Fault State",
+          "expr": "cloud_fault_localisation_status == 1",
+          "legendFormat": "{{status}}",
           "range": false,
           "instant": true
         }
@@ -137,23 +158,24 @@
       "fieldConfig": {
         "defaults": {
           "unit": "none",
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": { "text": "HEALTHY", "color": "green" },
-                "1": { "text": "SEGMENT FAULT", "color": "red" }
-              }
-            }
-          ],
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "value": null, "color": "green" },
-              { "value": 1, "color": "red" }
+              {
+                "value": null,
+                "color": "green"
+              },
+              {
+                "value": 1,
+                "color": "red"
+              }
             ]
           }
         }
+      },
+      "options": {
+        "textMode": "name"
       }
     },
     {
@@ -187,16 +209,28 @@
             {
               "type": "value",
               "options": {
-                "0": { "text": "DEGRADED", "color": "red" },
-                "1": { "text": "PASS", "color": "green" }
+                "0": {
+                  "text": "DEGRADED",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "PASS",
+                  "color": "green"
+                }
               }
             }
           ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "value": null, "color": "red" },
-              { "value": 1, "color": "green" }
+              {
+                "value": null,
+                "color": "red"
+              },
+              {
+                "value": 1,
+                "color": "green"
+              }
             ]
           }
         }
@@ -277,13 +311,13 @@
     },
     {
       "id": 107,
-      "title": "Segment Localisation Confidence",
+      "title": "Candidate confidence heuristic",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
         "uid": "cloud-prometheus"
       },
-      "description": "Confidence score of segment fault localisation (1.0 = unambiguous, 0.5 = ambiguous tie).",
+      "description": "1 / number of candidate segments; single-fault model heuristic, not measured diagnostic accuracy.",
       "gridPos": {
         "x": 0,
         "y": 12,

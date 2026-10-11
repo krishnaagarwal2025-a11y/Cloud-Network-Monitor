@@ -1,311 +1,417 @@
-# Cloud Application Network Monitoring
+# Innovative Approach to Cloud Application Network Monitoring
 
-A Linux & Mininet-based testbed for emulating multi-tier cloud application networks, measuring key performance metrics, injecting controlled network faults (delay, jitter, loss, bandwidth saturation), collecting metrics into Prometheus, visualizing via Grafana, and detecting/localizing network anomalies.
+**A Multi-Layer, Real-Time Framework for Measuring, Analysing and Visualising the Network Performance of Cloud-Hosted Applications**
 
-## Project Structure
+## Overview and problem statement
 
-```text
-cloud-network-monitor/
-├── README.md               # Project documentation and guide
-├── requirements.txt        # Python dependencies (Prometheus client, scikit-learn, etc.)
-├── .gitignore              # Ignored files (venv, logs, data)
-├── config/                 # Service configurations
-│   ├── prometheus.yml      # Prometheus scrape jobs and metric targets
-│   └── grafana/            # Grafana datasource and dashboard provisioning
-├── src/                    # Source code
-│   ├── topology/           # Mininet multi-tier cloud topology definitions
-│   │   ├── __init__.py
-│   │   └── cloud_topology.py
-│   ├── traffic/            # ICMP, HTTP, iperf3 probes and owned child processes
-│   ├── monitoring/         # Empty scaffold; Phase 4 pending
-│   └── analysis/           # Empty scaffold; later phases pending
-├── scripts/                # Execution and automation scripts
-│   ├── setup_env.sh        # Dependency installer and environment initializer
-│   ├── run_traffic_test.py # One Phase 3 measurement cycle and JSON report
-│   └── verify_phase3.py    # Tests, two live experiments, evidence checks
-└── tests/                  # Verification and unit tests
-    └── test_topology.py    # Topology structural & live integration tests
+This academic project investigates network and application performance in an
+Ubuntu Mininet testbed. End-to-end probes alone show degradation but can obscure
+which tier caused it. The project combines active measurements, statistical
+anomaly detection and segment inference with an observable monitoring pipeline.
+It emulates a cloud application network; it has not been validated against a
+production cloud deployment.
+
+## Objectives
+
+Measure latency, loss, availability and TCP performance; expose reproducible
+observations; demonstrate controlled impairments and recovery; and report
+localization ambiguity honestly.
+
+## Key features
+
+Seven deterministic hosts, five controllerless Open vSwitch bridges and eleven
+TCLinks; bounded ping/curl/iperf3 probes; atomic Prometheus snapshots; two
+provisioned Grafana dashboards; threshold, EWMA and Z-score detectors; controlled
+segment delay/loss/bandwidth changes; and ICMP-based Boolean network tomography.
+
+## Architecture overview and diagram
+
+```mermaid
+flowchart LR
+    N[Mininet / OVS / TCLink] --> T[TrafficManager: ping, curl, iperf3]
+    T --> E[Python exporter: latest complete cycle]
+    E --> P[Prometheus]
+    P --> G[Grafana]
+    T --> J[JSON measurement reports]
+    E --> A[Threshold / EWMA / Z-score]
+    A --> L[ICMP segment inference]
+    L --> E
+    F[FaultInjector: tc/netem] --> N
 ```
 
----
+Fullerenes is optional development tooling and sits outside this data flow.
 
-## Network Topology Architecture
+## Technology stack
 
-The testbed models a production multi-tier cloud architecture with distinct, measurable network segments:
+Python standard library and `prometheus-client`; Ubuntu Mininet, Open vSwitch,
+iproute2/tc, iputils ping, curl and iperf3; Prometheus; and project-local Grafana
+OSS 13.2.3. No external OpenFlow controller is required.
+
+## Network topology
+
+All hosts use the same `10.0.0.0/24` L2 network. Switch DPIDs are deterministic
+16-character hex strings ending in 1–5; MACs are explicit in
+`src/topology/cloud_topology.py`.
+
+| Tier switch | Attached hosts (IPv4) |
+| --- | --- |
+| s_client | client (10.0.0.10) |
+| s_edge | edge_gw (10.0.0.1) |
+| s_lb | lb (10.0.0.2) |
+| s_app | web_srv (.11), api_srv (.12), auth_srv (.13) |
+| s_db | db_srv (10.0.0.20) |
+
+| Segment | Switch link | Bandwidth | Egress delay |
+| --- | --- | ---: | ---: |
+| seg_client_edge | s_client ↔ s_edge | 100 Mbps | 5 ms |
+| seg_edge_lb | s_edge ↔ s_lb | 1000 Mbps | 2 ms |
+| seg_lb_app | s_lb ↔ s_app | 1000 Mbps | 1 ms |
+| seg_app_db | s_app ↔ s_db | 1000 Mbps | 1 ms |
+
+Seven host attachment links use 1000 Mbps / 0.1 ms. Four inter-tier links make
+eleven total. Delay is applied to both egress directions, so its contribution
+to round-trip time is approximately twice the configured per-direction delay.
+Host tier names describe roles: actual routing, load balancing, authentication,
+API and database application services are not implemented. The web service is
+a fixed Python HTTP response; iperf3 servers run on web_srv and db_srv.
+
+## Metrics collected
+
+| Observation | JSON unit | Prometheus metric / unit |
+| --- | --- | --- |
+| ICMP mean/min/max RTT | ms | cloud_ping_latency_seconds / min_seconds / max_seconds |
+| RTT standard deviation (mdev) | ms | cloud_ping_variation_seconds |
+| ICMP loss | percent | cloud_packet_loss_ratio (0–1) |
+| HTTP total and connect time | ms | cloud_http_response_seconds / cloud_http_connect_seconds |
+| HTTP availability and last status | ratio / code | cloud_http_success_ratio / cloud_http_status_code |
+| Receiver TCP throughput | Mbps | cloud_throughput_bits_per_second |
+| Optional sender retransmissions | count per test | cloud_tcp_retransmissions (gauge) |
+| Optional sender RTT | ms | cloud_tcp_rtt_seconds |
+| Probe health and measurement time | boolean / Unix seconds | cloud_probe_success / cloud_probe_timestamp_seconds |
+
+Probe labels identify `source`, `target`, and, where applicable, `probe`.
+RTT mdev is a variability proxy, not RFC-defined one-way jitter. Missing latency
+or throughput remains null in JSON and absent in exposition. Measured 100% loss
+remains visible. HTTP timing aggregates are omitted if any request failed.
+`cloud_collection_success` means a collection completed, while
+`cloud_measurement_cycle_success` means baseline probes passed. Prometheus `up`
+only means the exporter was reachable.
+
+## Monitoring and data flow
+
+A cycle sequentially probes five ICMP paths, HTTP client → web, and TCP client →
+web/DB. Scrapes read an atomic snapshot and do not generate additional traffic.
+The idle interval follows a complete cycle; active probes add their own runtime.
+Original probe timestamps distinguish historical playback from fresh data.
+
+## Anomaly detection
+
+Threshold checks use path-specific RTT limits, loss ratio, HTTP timing/status and
+minimum throughput. EWMA tracks a mean and mean absolute deviation, with warm-up
+and damped outlier updates. Z-score uses a bounded sliding window with minimum
+samples and protection for zero variance. Configuration parameters are validated.
+`cloud_anomalies_total` is a current-cycle gauge despite its inherited name;
+multiple algorithms can count the same event. Defaults are lab assumptions,
+not calibrated accuracy claims.
+
+## Fault injection
+
+`FaultInjector` uses Mininet TCIntf on the four declared switch links. It validates
+delay strings, finite loss in [0,100] percent and bandwidth in (0,1000] Mbps,
+checks tc command output and HTB/netem presence on both interfaces, and retains
+restoration ownership before changing either interface. Partial failures attempt
+rollback; failed restoration stays tracked and is reported. Restoration uses the
+declared topology baseline, not an arbitrary external qdisc configuration.
+`net=None` is simulation only. It does not inject kernel faults.
+
+## Fault localization
+
+ICMP observations cover a path-to-segment matrix. Healthy paths eliminate their
+segments; degraded paths yield candidate intersections, or a union if a single
+fault cannot explain them. Application errors alone do not identify network
+segments. Missing coverage and conflicting evidence are inconclusive. The default
+paths cannot distinguish seg_edge_lb from seg_lb_app. Confidence is the heuristic
+`1 / candidate count`, not a calibrated probability. Inferences assume the lab
+routing matrix and should not be described as definitive real-world diagnosis.
+
+## Repository structure
 
 ```text
- s_client ---- s_edge ---- s_lb ---- s_app ---- s_db
-     |            |          |        |          |
-   client       edge_gw       lb       |        db_srv
-                              web_srv, api_srv, auth_srv
-                              (each attached to s_app)
+src/topology/       deterministic topology and safe experiment lifecycle
+src/traffic/        active probes, owned services, fault injection
+src/monitoring/     exporter and owned Prometheus/Grafana helpers
+src/analysis/       anomaly detectors and segment localization
+config/            Prometheus and Grafana provisioning/dashboard JSON
+scripts/           setup, runners, acceptance checks, optional agent tools
+tests/             unittest suite and explicitly synthetic fixture
+docs/              historical evidence, experiment and current audit notes
+.runtime/          ignored downloaded binaries and optional agent dependencies
+results/           generated measurements and service data; selected paths ignored
 ```
 
-The four switch-to-switch links define the monitored segments. All hosts
-share one IPv4 subnet and communicate through OVS learning bridges.
-`edge_gw` and `lb` are logical role names: they do not currently implement
-routing, NAT, reverse proxying, or load balancing. The HTTP service is a
-small availability endpoint, not a complete cloud application.
+## Prerequisites for Ubuntu
 
-### Node Addressing & Roles
+Use Python 3.12 or later; this audit executed Python 3.14.4 on Ubuntu Linux x86_64.
+Other Python versions and operating systems have not been verified. Live tests
+require root, kernel network namespaces, an active OVS service, tc/netem and no
+colliding project bridges. Ordinary tests require no internet after installation.
+The full suite includes real localhost services and requires installed Prometheus,
+iperf3 and the local Grafana binary.
 
-| Node Name | Type | IP Address | MAC Address | Role / Description |
-| :--- | :--- | :--- | :--- | :--- |
-| **`client`** | Host | `10.0.0.10/24` | `00:00:00:00:00:10` | External client simulating user traffic |
-| **`edge_gw`** | Host | `10.0.0.1/24` | `00:00:00:00:00:01` | Edge / Ingress Internet Gateway |
-| **`lb`** | Host | `10.0.0.2/24` | `00:00:00:00:00:02` | Internal Application Load Balancer |
-| **`web_srv`** | Host | `10.0.0.11/24` | `00:00:00:00:00:11` | Frontend Web Service |
-| **`api_srv`** | Host | `10.0.0.12/24` | `00:00:00:00:00:12` | Backend REST API Service |
-| **`auth_srv`** | Host | `10.0.0.13/24` | `00:00:00:00:00:13` | Authentication & Identity Service |
-| **`db_srv`** | Host | `10.0.0.20/24` | `00:00:00:00:00:20` | Database Storage Service |
-| **`s_client`** | Switch | - | - | DPID: `0000000000000001` (Client Access Switch) |
-| **`s_edge`** | Switch | - | - | DPID: `0000000000000002` (Edge Gateway Switch) |
-| **`s_lb`** | Switch | - | - | DPID: `0000000000000003` (Load Balancer DMZ Switch) |
-| **`s_app`** | Switch | - | - | DPID: `0000000000000004` (App Services Switch) |
-| **`s_db`** | Switch | - | - | DPID: `0000000000000005` (Database Tier Switch) |
+## Environment setup
 
-### Measurable Inter-Tier Segments
-
-Each inter-tier boundary is connected via a dedicated Open vSwitch link with baseline QoS parameters using `TCLink`:
-
-| Segment Identifier | Endpoints | Baseline Bandwidth | Baseline Delay | Loss | Description |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **`seg_client_edge`** | `s_client` <-> `s_edge` | 100 Mbps | 5 ms | 0% | Client WAN ingress segment |
-| **`seg_edge_lb`** | `s_edge` <-> `s_lb` | 1000 Mbps | 2 ms | 0% | Ingress to Load Balancer DMZ |
-| **`seg_lb_app`** | `s_lb` <-> `s_app` | 1000 Mbps | 1 ms | 0% | Load Balancer to App service mesh |
-| **`seg_app_db`** | `s_app` <-> `s_db` | 1000 Mbps | 1 ms | 0% | App services to Database backend |
-
----
-
-## Operating Instructions
-
-### 1. Starting the Topology Interactively
-
-You can launch the topology directly into the Mininet CLI:
+From the existing repository root:
 
 ```bash
-# Method A: Using the standalone script (recommended)
-sudo python3 src/topology/cloud_topology.py
-
-# Method B: Using the Mininet CLI with custom topo flag
-sudo mn --custom src/topology/cloud_topology.py --topo cloud --switch ovsbr --controller none --link tc
+bash scripts/setup_env.sh
+source .venv/bin/activate
 ```
 
-Inside the Mininet CLI, test connectivity:
-```text
-mininet> nodes
-mininet> net
-mininet> pingall
-mininet> client ping -c 3 edge_gw
-mininet> exit
-```
+The script uses sudo for apt installation and starting OVS, then creates a
+project venv with `--system-site-packages` so apt's Mininet is visible. It stops
+on errors and preserves an existing venv. An older isolated venv can fail the
+Mininet import check; inspect it before replacing anything. Full apt setup was
+reviewed and syntax-checked, not rerun on a fresh Ubuntu installation.
 
-### 2. Running Topology Tests
+## Dependency installation
 
-Run the test suite to verify graph structure, node attachments, and live connectivity:
+For manual setup, install the packages listed in `scripts/setup_env.sh`, then:
 
 ```bash
-# Structural verification (requires no root privileges):
-python3 tests/test_topology.py
-
-# Full live network lifecycle & connectivity test (requires sudo):
-sudo python3 tests/test_topology.py
+python3 -m venv --system-site-packages .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -c 'import mininet, prometheus_client'
 ```
 
-The test validates:
-- [x] All 7 hosts and 5 switches are created.
-- [x] All 11 links (7 host + 4 segment links) exist with expected QoS settings.
-- [x] Host deterministic IP configurations match specification.
-- [x] Tier-to-tier reachability and 0% packet loss on `pingall`.
-- [x] Clean network teardown.
+Do not expect `sudo python3` to use an activated venv. Use the repository's
+absolute `.venv/bin/python` path with sudo, or the system Python with apt's
+`python3-prometheus-client`. No ML or plotting dependencies are required by the
+current code. Optional Fullerenes setup is in [docs/fullerenes.md](docs/fullerenes.md).
 
-### 3. Network ownership and cleanup
+## Start the network topology
 
-The Phase 3 runner and live tests use `src/topology/lifecycle.py` around the
-existing topology. It locks concurrent project runs, refuses conflicting
-project-named interfaces/bridges, and stops the network it created in a
-`finally` block. It then checks that project-named root-namespace interfaces
-and OVS bridges are gone. Partial network construction also has a teardown
-path. These privileged paths passed the Phase 3 acceptance run on the host.
+```bash
+sudo .venv/bin/python -m src.topology.cloud_topology
+```
 
-Do not run broad process cleanup or `mn -c` automatically on a shared computer.
-If startup reports a conflict, inspect the named resource before deciding
-whether it belongs to an earlier project run. Forced termination (SIGKILL),
-a machine crash, or an OVS failure can still require manual recovery.
+This interactive CLI uses the collision-checked lifecycle and tears down its
+owned network on exit. Do not start it alongside a runner that builds the same
+topology. The exporters do not attach to an already-open interactive topology.
 
----
+## Start traffic generation and measurements
 
-## Phase 3: Traffic generation and KPI measurement
+```bash
+sudo .venv/bin/python scripts/run_traffic_test.py
+```
 
-### Implementation
+This finite run creates its network, starts three owned services, collects and
+saves JSON, reports failures with nonzero status, and stops owned resources.
 
-- ICMP probes cover client to edge, web, API and DB, plus web to DB.
-- HTTP probes use curl against a dedicated page served on `web_srv:8080`.
-  Proxy environment variables are bypassed for these lab probes.
-- iperf3 servers run on both `web_srv:5201` and `db_srv:5201`.
-- Services are owned `Popen` children. Readiness checks match the listening
-  socket to that child's file descriptors within its network namespace.
-  Starting or stopping a server never kills another process by name or port.
-- Shutdown sends TERM to each owned child, waits, and uses KILL only on that
-  same child if necessary. Probe execution is bounded and children are reaped
-  on timeout or interruption.
-- The runner collects one measurement cycle. Tables, summary and saved JSON
-  all derive from that cycle. A baseline run fails on missing/failed probes,
-  any measured packet loss, HTTP status other than 200, or invalid throughput.
-- Missing RTT, throughput and optional iperf statistics are JSON `null`.
-  Every probe includes success, exit status, raw output and diagnostic fields.
-  A measured 100% packet loss remains 100%; a command that produced no loss
-  statistics reports `null`. HTTP attempt timings can exist even on failure;
-  the summary response time is unavailable if any HTTP request failed.
-- Ping `mdev` is RTT standard deviation, used here as latency variation. It
-  is not an inter-packet-delay jitter measurement.
+## Start the metrics exporter
 
-The topology's configured delays apply in both travel directions. Historical
-README output was illustrative and unverified, and has been removed. No
-sample table should be treated as evidence of a live experiment.
+Standalone, without sudo or a newly created network:
 
-### Dependencies
+```bash
+python3 src/monitoring/exporter.py --results-dir results
+# Module form from the repository root also works:
+python3 -m src.monitoring.exporter --results-dir results
+```
 
-Phase 3 uses Python's standard library plus the installed system Mininet
-package, OVS, ping, curl, iperf3 and `tc`. The scientific packages listed in
-`requirements.txt` are not needed for Phase 3. Do not install that entire
-list merely to run these checks. The existing setup script is a broad initial
-installer, not a required step on an already configured machine.
+It listens on loopback port 9200 and reads the newest immutable
+`traffic_metrics_*.json` report. No reports means exporter status only, no invented
+probe values. `--report PATH` loads one fixed historical report; `--port PORT`
+changes the listening port. Malformed imports clear stale measurements and log
+errors. Ctrl+C closes the socket. Binding errors report the actual failure.
 
-### Run the tests and experiments
+For continuous **live** collection and the full stack:
 
-From the repository directory, run the unprivileged suite first:
+```bash
+sudo .venv/bin/python scripts/run_monitoring.py --grafana
+# Finite demonstration:
+sudo .venv/bin/python scripts/run_monitoring.py --cycles 3 --grafana
+```
+
+The live runner needs sudo for Mininet and link shaping. It creates its own
+network; it reuses an existing Prometheus only after checking its scrape target.
+Existing Grafana reuse checks health, but users must verify its datasource and
+provisioning. Owned services stop on exit; reused services remain running.
+Defaults can be overridden with `--exporter-port`, `--prometheus-port`,
+`--grafana-port`, `--interval` and `--cycles` (0 means continuous).
+
+## Start Prometheus
+
+The live runner starts an owned instance if needed. For a separate manual
+process, run in a terminal with the exporter already running:
+
+```bash
+promtool check config config/prometheus.yml
+prometheus --config.file=config/prometheus.yml --web.listen-address=127.0.0.1:9091 --storage.tsdb.path=.runtime/prometheus-data --storage.tsdb.retention.time=24h
+```
+
+Do not launch another process when 9091 is occupied. The checked-in configuration
+scrapes `127.0.0.1:9200` every two seconds; owned verifier instances use one second.
+Update a manually managed scrape target when selecting a different exporter port.
+
+## Start Grafana
+
+After reviewing the pinned official archive download (approximately 461 MB):
+
+```bash
+python3 scripts/install_grafana.py
+```
+
+The installer verifies SHA256, uses safe staged extraction and refuses to
+overwrite an existing installation. This audit reused the installed runtime and
+checked the checksum against the [official download page](https://grafana.com/grafana/download/13.2.3?edition=oss&platform=linux).
+Use `scripts/run_monitoring.py --grafana` to supply provisioning environment paths
+and launch it. The localhost-only instance enables anonymous read-only Viewer
+access, disables the login form, and generates an admin password that is not
+printed. No verified default admin credentials are supplied by this project.
+
+## Dashboard URLs
+
+- Exporter: <http://127.0.0.1:9200/metrics>
+- Prometheus: <http://127.0.0.1:9091> (inspect Targets and `up`)
+- Overview: <http://127.0.0.1:3000/d/cloud-network-overview>
+- Anomalies and inference: <http://127.0.0.1:3000/d/cloud-anomaly-detection>
+
+Overview panels show reachability, availability, probe age, timings, loss,
+throughput, variability and collection status. The anomaly dashboard shows
+algorithm findings, explicit inference status, candidates and confidence.
+Both refresh every five seconds; exporter UP does not imply fresh probes.
+
+## Run unit tests
 
 ```bash
 python3 -m unittest discover -v -s tests
 ```
 
-Two Mininet tests skip without root. Local subprocess regression tests open
-loopback sockets and run real HTTP/iperf3 processes; they require socket access
-but no sudo. They are distinct from Mininet integration tests.
-
-For the complete Phase 3 acceptance check:
+The suite mixes unit/mocked tests with real loopback process/service integration.
+As non-root, two live Mininet tests skip explicitly. All other tests still run;
+no assertion is weakened to hide failures. For only pure detector/inference units:
 
 ```bash
-sudo python3 scripts/verify_phase3.py
+PYTHONPATH=tests python3 -m unittest -v test_anomaly test_localiser test_fault_injection
 ```
 
-This creates temporary Mininet interfaces, OVS bridges, HTTP and iperf3
-processes, and generates network traffic. It runs all tests with root,
-then two full experiments. Each experiment tears down its own resources.
-The verifier checks genuine JSON records, summary consistency, child-process
-exit and successful cleanup. A failure stops the sequence and retains logs.
-
-Individual commands remain available:
+## Run simulation or recorded-data tests
 
 ```bash
-sudo python3 tests/test_topology.py
-sudo python3 tests/test_traffic.py
-sudo python3 scripts/run_traffic_test.py
+python3 scripts/verify_phase6.py --simulated
+python3 scripts/verify_exporter.py --port 9200
 ```
 
-Reports are written to unique `results/traffic_metrics_<time>_<id>.json` files,
-or the directory selected with `--output-dir`. Previous reports are preserved.
-The acceptance command saves logs, both reports and `verification.json` in a
-unique `results/phase3_verification_<time>/` directory. Results are Git-ignored.
-A zero exit code means all baseline checks and verified cleanup passed;
-errors return 1, and interruption returns 130. Failure reports are saved too.
-
-### Current verification status
-
-Phase 3 live acceptance passed: 37 tests with no skips, two complete traffic
-experiments, consistent saved measurements and verified cleanup. See
-[the Phase 3 engineering record](docs/phase3-status.md) for evidence paths.
-
-## Phase 4: Prometheus collection
-
-The metrics endpoint publishes the latest complete cycle while a single
-measurement loop runs probes sequentially. Scrapes do not trigger additional
-iperf traffic. Snapshots update atomically, so a scrape cannot mix two cycles.
+Simulation uses `tests/fixtures/simulated_baseline.json`, labelled synthetic,
+through a real exporter and isolated Prometheus. Optional `--baseline-report PATH`
+uses a supplied template but simulated impairments remain simulation.
+For previously saved actual data, replace paths with your own evidence:
 
 ```bash
-sudo python3 scripts/run_monitoring.py
-```
-
-This starts the project network, exporter on `127.0.0.1:9200`, and a separate
-Prometheus instance on `127.0.0.1:9091`. It uses the existing installed binary,
-leaves the system Prometheus service unchanged, and stores its own logs and
-time-series data under a unique `results/monitoring_<time>/` directory.
-Ctrl+C stops the owned services and network. Use `--cycles 3` for a finite run.
-The default five-second interval is idle time *after* a complete collection;
-probing adds its own duration. TCP throughput tests actively load the network.
-
-The host already uses ports 9090 and 9100 for system services. The new ports
-avoid those conflicts. Phase 4 live baseline, application failure and recovery
-acceptance passed; see the evidence in `docs/phase4-status.md`.
-
-```bash
-# Full live acceptance: baseline -> owned HTTP service down -> recovery.
-sudo python3 scripts/verify_phase4.py
-
-# Optional unprivileged check of a previously saved genuine report:
 python3 scripts/verify_phase4.py --recorded-report /absolute/path/to/traffic_metrics_REPORT.json
+python3 scripts/verify_phase5.py --recorded-directory /absolute/path/to/phase4_verification_DIRECTORY
 ```
 
-The recorded-report mode verifies ingestion only. It preserves original probe
-timestamps and cannot establish continuous live collection or recovery.
+Phase 5 playback requires a successful live Phase 4 record with its referenced
+files available. Existing older metadata uses absolute paths; moved evidence
+requires explicit path review. Recorded probes retain their original timestamps.
+These commands do not establish live Mininet functionality.
 
-[Metric definitions, failure semantics and verification status](docs/phase4-status.md)
-are documented separately.
+## Run live Mininet tests
 
-
-## Phase 5: Grafana dashboards
-
-The dashboard and datasource are provisioned from `config/grafana/`. The
-Grafana OSS binary is pinned, checksum-verified and installed inside `.runtime/`.
-The runtime and generated data are Git-ignored. Installation changes no system
-packages or services. On a new machine, approve the approximately 461 MB download
-before running `python3 scripts/install_grafana.py`.
+After inspecting existing bridges and stopping the owning project session:
 
 ```bash
-sudo python3 scripts/run_monitoring.py --grafana
+sudo ovs-vsctl list-br
+sudo .venv/bin/python -m unittest discover -v -s tests
+sudo .venv/bin/python scripts/verify_phase3.py
+sudo .venv/bin/python scripts/verify_phase4.py
+sudo .venv/bin/python scripts/verify_phase5.py
 ```
 
-Open `http://127.0.0.1:3000/d/cloud-network-overview`. This localhost instance
-provides anonymous read-only viewing, uses a generated admin password, and
-loads its datasource and dashboard automatically. Stop with Ctrl+C. Port
-conflicts fail without terminating the existing listener.
+Root is required to create namespaces, virtual links and OVS bridges. Do not use
+blanket `mn -c` or kill processes by port/name. A collision refusal is a safety
+check; inspect ownership rather than deleting existing resources.
 
-The dashboard includes exporter reachability, HTTP availability, baseline
-checks, probe age, path RTT, loss, HTTP timings, throughput, probe availability
-timeline, RTT variation, retransmissions and collection status. Missing values
-remain gaps. Baseline checks describe current probe results; statistical
-anomaly detection and injected-fault timelines are added in later phases.
+## Execute fault-injection experiments
 
 ```bash
-sudo python3 scripts/verify_phase5.py
+sudo .venv/bin/python scripts/verify_phase6.py
 ```
 
-This verifies provisioned dashboard queries during real baseline, application
-failure and recovery, and saves their returned data. For unprivileged UI/data
-verification, `--recorded-directory` can replay a completed Phase 4 evidence
-directory. Playback uses genuine saved records with their original measurement
-timestamps; it must not be presented as newly generated live traffic.
+This creates its own temporary network and exercises baseline, 50 ms per-direction
+client-edge delay, deterministic 100% app-DB loss, 40 ms per-direction core delay,
+restoration and recovery. The deterministic outage replaces a statistically
+unreliable three-packet 25% live-loss check; simulation retains 25% synthetic loss.
+Delay overrides the baseline, rather than adding exactly that amount to RTT.
+Live fault application and restoration still require new privileged acceptance.
 
-## Phase 6: Fault injection, anomaly detection and segment localisation
+## Reproduce and export experiment results
 
-Controlled network faults (latency, packet loss, bandwidth restrictions) are
-injected using Linux `tc`/`netem` via `FaultInjector` on specific Mininet segment
-links. All active impairments are tracked and automatically restored via context
-manager guarantees.
+Each run writes a new `results/phase*_verification_<time>/` directory or unique
+`traffic_metrics_<time>_<id>.json` records. Inspect `verification.json`, mode,
+settings, stage results and cleanup before using evidence. JSON is the supported
+export format; copying a reviewed report preserves all units and original times.
+See [docs/experiments.md](docs/experiments.md) for conditions and provenance.
+No performance graphs or numerical improvement claims were created by this audit.
+Curate small sanitized reports under docs; never publish raw service databases.
 
-### Detection & Localisation
-- **Anomaly Detection**: Combines three complementary strategies:
-  1. Static / Configurable Thresholds: domain bounds on latency, loss, response time, and throughput.
-  2. EWMA (Exponentially Weighted Moving Average): adaptive trend tracking with dynamic mean absolute deviation.
-  3. Z-score: sliding-window statistical deviation detection with zero-variance protection.
-- **Boolean Network Tomography**: Infers likely faulty segments from end-to-end path measurements using the Axiom of Good Paths (healthy link elimination) and intersection of degraded paths. Topologically indistinguishable segments are honestly reported with ambiguous candidate sets and fractional confidence.
-- **Grafana Visualization**: A dedicated *Anomaly Detection & Fault Localisation* dashboard is provisioned at `http://127.0.0.1:3000/d/cloud-anomaly-detection`.
+## Troubleshooting
 
-```bash
-# Unprivileged test suite (validates detectors, tomography, fault injector logic, and dashboard contracts)
-python3 -m unittest discover -v -s tests
+- **9200 unavailable:** inspect `ss -ltnp`, runner exit status and
+  `results/monitoring_*/session.json`. Direct-file import startup is fixed.
+  `python3 scripts/verify_exporter.py --port 9200 --prometheus-port 9091` verifies
+  a temporary exporter and an already configured scrape, then closes that exporter.
+- **Address already in use:** preserve the listener; inspect its owner/configuration.
+  Existing Prometheus/Grafana without an exporter does not prove collection runs.
+- **Mininet import fails:** use the apt-compatible system-site-packages venv.
+- **Existing project resources:** stop the owning experiment normally; review stale
+  resources manually. This audit found project bridges and did not remove them.
+- **Sandbox socket errors:** localhost tests need socket-capable execution; root
+  is unnecessary for these checks. Live networking separately needs sudo.
+- **Empty panels:** check `up`, collection status, probe age and missing-data
+  semantics. Range panels need sufficient scrape history.
+- **sudo authentication required:** authenticate in your terminal; never send
+  passwords to the agent. No live fault injection ran in this audit.
 
-# Live Mininet Phase 6 acceptance run (requires root)
-sudo python3 scripts/verify_phase6.py
-```
+## Security considerations
+
+Bind local services to loopback. Keep secrets, environment files, private keys,
+Grafana databases, raw logs and agent indexes out of Git. Read-only anonymous
+Grafana is a local lab setting, not a public deployment configuration. Review npm
+and download sources; never run a remote shell installer. Active throughput tests
+load the emulated network. Mininet naming/collision guards do not make arbitrary
+root scripts safe.
+
+## Current verification status
+
+See [docs/audit-2026-10-11.md](docs/audit-2026-10-11.md) for exact final commands and
+outcomes. The final suite ran 86 tests: 84 passed and two root-only tests skipped.
+The initial suite was 73 tests (71 passed, two root-only skips) outside
+the socket-restricted sandbox. Standalone exporter binding, HTTP exposition and
+existing Prometheus scraping were directly verified, then the owned exporter was
+stopped. Recorded Phase 4 ingestion and Phase 5 panel queries passed. Portable
+Phase 6 simulation passed. New live Mininet/fault tests are blocked by interactive
+sudo and existing project resources. Historical evidence is separately labelled.
+
+## Known limitations
+
+The network is an L2 academic emulator, not a deployed cloud service. Sequential
+active samples and tiny ping batches limit statistical conclusions. Core segments
+can be indistinguishable; multiple faults/noise can violate the model. Confidence
+is heuristic. Genuine one-way jitter and passive flow collection are absent.
+Grafana provisioning and query checks do not prove browser visual layout.
+Fresh-machine Ubuntu setup and modified live cleanup require further verification.
+
+## Future work
+
+Calibrate thresholds with repeated live baselines; evaluate multi-fault and noisy
+observations; add recorded-data path portability and research plotting; implement
+optional disambiguation probes. Passive NetFlow/IPFIX, SNMP/eBPF, Isolation Forest,
+Kafka or Kubernetes monitoring are not implemented.
+
+## License
+
+No project license is present. The owner must select an appropriate license before
+claiming the repository is open source. Third-party dependencies retain their
+own licenses; Fullerenes is MIT and Grafana OSS is AGPLv3. This audit did not
+choose a license on the owner's behalf.

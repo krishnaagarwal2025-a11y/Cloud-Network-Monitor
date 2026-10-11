@@ -65,6 +65,16 @@ class ThresholdDetector:
         self.thresholds = dict(self.DEFAULT_THRESHOLDS)
         if thresholds:
             self.thresholds.update(thresholds)
+        limits = self.thresholds['latency_ms']
+        if not isinstance(limits, dict) or not limits:
+            raise ValueError('latency_ms must be a nonempty path threshold map')
+        values = [*limits.values(), self.thresholds['http_response_time_ms'],
+                  self.thresholds['min_throughput_mbps']]
+        if any(not isinstance(v, (int, float)) or not math.isfinite(v) or v <= 0 for v in values):
+            raise ValueError('Latency, HTTP and throughput thresholds must be finite and positive')
+        loss = self.thresholds['packet_loss_ratio']
+        if not isinstance(loss, (int, float)) or not math.isfinite(loss) or not 0 <= loss <= 1:
+            raise ValueError('packet_loss_ratio must be in [0, 1]')
 
     def evaluate_cycle(self, report: Dict[str, Any]) -> List[AnomalyRecord]:
         anomalies = []
@@ -208,8 +218,10 @@ class EWMADetector:
                  min_samples: int = 3, min_delta: float = 2.0):
         if not 0.0 < alpha <= 1.0:
             raise ValueError('alpha must be in (0, 1]')
-        if k_factor <= 0:
+        if not math.isfinite(k_factor) or k_factor <= 0:
             raise ValueError('k_factor must be positive')
+        if not isinstance(min_samples, int) or min_samples < 1 or not math.isfinite(min_delta) or min_delta <= 0:
+            raise ValueError('min_samples and min_delta must be positive')
         self.alpha = alpha
         self.k_factor = k_factor
         self.min_samples = min_samples
@@ -318,10 +330,14 @@ class ZScoreDetector:
 
     def __init__(self, window_size: int = 15, z_threshold: float = 3.0,
                  min_samples: int = 5, min_delta: float = 3.0):
-        if window_size < 3:
+        if not isinstance(window_size, int) or window_size < 3:
             raise ValueError('window_size must be at least 3')
-        if z_threshold <= 0:
+        if not math.isfinite(z_threshold) or z_threshold <= 0:
             raise ValueError('z_threshold must be positive')
+        if not isinstance(min_samples, int) or not 2 <= min_samples <= window_size:
+            raise ValueError('min_samples must be between 2 and window_size')
+        if not math.isfinite(min_delta) or min_delta <= 0:
+            raise ValueError('min_delta must be finite and positive')
         self.window_size = window_size
         self.z_threshold = z_threshold
         self.min_samples = min_samples

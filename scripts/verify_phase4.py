@@ -47,10 +47,18 @@ def check_cycle(collector, report, prom_port, directory, stage, duration=0):
             max(r['timestamp'] for r in report['http']),
         'cloud_probe_success{probe="http",source="client",target="web_srv"}':
             int(all(r['success'] for r in report['http'])),
-        'cloud_ping_latency_seconds' + suffix: web_ping['rtt_avg_ms'] / 1000,
-        'cloud_packet_loss_ratio' + suffix: web_ping['packet_loss_percent'] / 100,
-        'cloud_throughput_bits_per_second' + suffix: web_iperf['throughput_mbps'] * 1e6,
     }
+    for name, row, field, scale in (
+        ('cloud_ping_latency_seconds', web_ping, 'rtt_avg_ms', .001),
+        ('cloud_packet_loss_ratio', web_ping, 'packet_loss_percent', .01),
+        ('cloud_throughput_bits_per_second', web_iperf, 'throughput_mbps', 1e6),
+    ):
+        expression = name + suffix
+        observed = row.get(field)
+        if observed is not None and (row['success'] or field == 'packet_loss_percent'):
+            checks[expression] = observed * scale
+        else:
+            evidence['queries'][expression] = wait_query(prom_port, expression, lambda rows: rows == [])
     for expression, expected in checks.items():
         evidence['queries'][expression] = metric_check(prom_port, expression, expected)
     if all(r['success'] for r in report['http']):

@@ -72,10 +72,11 @@ class LocalisationResult:
         Returns evaluation dict with classification.
         """
         if injected_segment is None:
-            correct = (len(self.candidate_segments) == 0)
+            correct = self.status == 'healthy'
             return {
                 'injected_segment': None,
-                'classification': 'correct_clean' if correct else 'false_positive',
+                'classification': ('correct_clean' if correct else
+                                   'inconclusive' if self.status == 'inconclusive' else 'false_positive'),
                 'matched': correct,
             }
 
@@ -107,6 +108,9 @@ class FaultLocaliser:
     def __init__(self,
                  latency_spike_threshold_ms: float = 20.0,
                  loss_threshold_percent: float = 1.0):
+        if (not math.isfinite(latency_spike_threshold_ms) or latency_spike_threshold_ms <= 0
+                or not math.isfinite(loss_threshold_percent) or not 0 < loss_threshold_percent <= 100):
+            raise ValueError('Localisation thresholds must be finite and positive; loss cannot exceed 100%')
         self.latency_spike_threshold_ms = latency_spike_threshold_ms
         self.loss_threshold_percent = loss_threshold_percent
 
@@ -126,7 +130,9 @@ class FaultLocaliser:
         anomalous_from_detector: Set[Tuple[str, str]] = set()
         if anomaly_report and anomaly_report.get('anomalies'):
             for a in anomaly_report['anomalies']:
-                anomalous_from_detector.add((a['source'], a['target']))
+                # Application errors and TCP load alone do not identify a link fault.
+                if a['metric'] in ('latency', 'packet_loss'):
+                    anomalous_from_detector.add((a['source'], a['target']))
 
         for probe in report.get('icmp', []):
             src, tgt = probe['source'], probe['target']
@@ -136,8 +142,10 @@ class FaultLocaliser:
 
             path_str = f'{src}->{tgt}'
             success = probe.get('success', False)
-            loss = probe.get('packet_loss_percent', 0.0)
+            loss = probe.get('packet_loss_percent')
             rtt = probe.get('rtt_avg_ms')
+            if loss is None and rtt is None:
+                continue  # No network observation, not proof of a bad segment.
 
             # Path is anomalous if:
             # - flagged by anomaly detector
@@ -167,16 +175,21 @@ class FaultLocaliser:
 
         # 2. Boolean Tomography Inference
         if not anomalous_paths:
+            covered = set()
+            for path in healthy_paths:
+                covered.update(PATH_SEGMENT_MAP[tuple(path.split('->'))])
+            complete = covered == set(ALL_SEGMENTS)
             return LocalisationResult(
                 timestamp=now,
                 candidate_segments=[],
-                confidence=1.0,
-                is_ambiguous=False,
-                status='healthy',
-                explanation='All network paths operating normally; no faults detected.',
+                confidence=1.0 if complete else 0.0,
+                is_ambiguous=not complete,
+                status='healthy' if complete else 'inconclusive',
+                explanation=('Observed paths cover every segment; no network faults detected.' if complete
+                             else 'Insufficient observations to assess all network segments.'),
                 healthy_paths=healthy_paths,
                 anomalous_paths=[],
-                eliminated_segments=ALL_SEGMENTS,
+                eliminated_segments=sorted(covered),
             )
 
         # Elimination Rule: Any segment on a healthy path is healthy
@@ -219,7 +232,7 @@ class FaultLocaliser:
             status = 'localised'
             confidence = 1.0
             is_ambiguous = False
-            explanation = (f'Fault definitively localised to segment {candidates[0]} '
+            explanation = (f'Single-fault model identifies candidate {candidates[0]} '
                            f'(supported by {len(anomalous_paths)} degraded paths, '
                            f'{len(eliminated_segments)} segments verified healthy).')
         else:

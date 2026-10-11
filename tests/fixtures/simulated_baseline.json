@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "mode": "synthetic_fixture",
+  "description": "Deterministic simulated values, never live measurement evidence.",
+  "timestamp": 1000,
+  "success": true,
+  "icmp": [
+    {
+      "source": "client",
+      "target": "edge_gw",
+      "success": true,
+      "timestamp": 1000,
+      "rtt_avg_ms": 10,
+      "rtt_min_ms": 10,
+      "rtt_max_ms": 10,
+      "rtt_mdev_ms": 0,
+      "packet_loss_percent": 0
+    },
+    {
+      "source": "client",
+      "target": "web_srv",
+      "success": true,
+      "timestamp": 1000,
+      "rtt_avg_ms": 16,
+      "rtt_min_ms": 16,
+      "rtt_max_ms": 16,
+      "rtt_mdev_ms": 0,
+      "packet_loss_percent": 0
+    },
+    {
+      "source": "client",
+      "target": "api_srv",
+      "success": true,
+      "timestamp": 1000,
+      "rtt_avg_ms": 16,
+      "rtt_min_ms": 16,
+      "rtt_max_ms": 16,
+      "rtt_mdev_ms": 0,
+      "packet_loss_percent": 0
+    },
+    {
+      "source": "client",
+      "target": "db_srv",
+      "success": true,
+      "timestamp": 1000,
+      "rtt_avg_ms": 18,
+      "rtt_min_ms": 18,
+      "rtt_max_ms": 18,
+      "rtt_mdev_ms": 0,
+      "packet_loss_percent": 0
+    },
+    {
+      "source": "web_srv",
+      "target": "db_srv",
+      "success": true,
+      "timestamp": 1000,
+      "rtt_avg_ms": 2,
+      "rtt_min_ms": 2,
+      "rtt_max_ms": 2,
+      "rtt_mdev_ms": 0,
+      "packet_loss_percent": 0
+    }
+  ],
+  "http": [
+    {
+      "source": "client",
+      "target": "web_srv",
+      "success": true,
+      "timestamp": 1000,
+      "http_status": 200,
+      "response_time_ms": 35,
+      "connect_time_ms": 16
+    }
+  ],
+  "throughput": [
+    {
+      "source": "client",
+      "target": "web_srv",
+      "success": true,
+      "timestamp": 1000,
+      "throughput_mbps": 92,
+      "duration_sec": 2,
+      "retransmits": 0,
+      "mean_rtt_ms": null
+    },
+    {
+      "source": "client",
+      "target": "db_srv",
+      "success": true,
+      "timestamp": 1000,
+      "throughput_mbps": 92,
+      "duration_sec": 2,
+      "retransmits": 0,
+      "mean_rtt_ms": null
+    }
+  ]
+}

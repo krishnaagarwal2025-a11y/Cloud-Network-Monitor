@@ -6,7 +6,7 @@ on specific Mininet segment links.
 
 Safety principles:
 - Only touches interfaces belonging to the specified segment link.
-- Records and restores the original QoS configuration.
+    - Tracks ownership and attempts restoration of declared baseline QoS.
 - Verifies the impairment is active after applying.
 - Cleans up in a finally block / context manager even on errors.
 - Never runs destructive global qdisc resets.
@@ -15,6 +15,8 @@ Safety principles:
 from contextlib import contextmanager
 from dataclasses import dataclass, asdict
 import time
+import math
+import re
 from typing import Dict, Optional, Any, Tuple
 
 from src.topology.cloud_topology import SEGMENTS
@@ -77,6 +79,18 @@ class FaultInjector:
         if segment_name not in SEGMENTS:
             raise ValueError(f'Unknown segment: {segment_name}')
 
+        if delay is loss is bw is None:
+            raise ValueError('Specify at least one impairment')
+        if delay is not None and (not isinstance(delay, str) or
+                                  not re.fullmatch(r'(?:\d+(?:\.\d+)?)(?:us|ms|s)', delay)):
+            raise ValueError('delay must be a nonnegative duration such as 50ms')
+        for name, value, low, high in (('loss', loss, 0, 100), ('bw', bw, 0, 1000)):
+            if value is not None and (isinstance(value, bool) or
+                    not isinstance(value, (int, float)) or not math.isfinite(value) or
+                    value < low or value > high or (name == 'bw' and value == 0)):
+                raise ValueError(f'{name} must be finite and in '
+                                 + ('[0, 100]' if name == 'loss' else '(0, 1000]'))
+
         baseline = dict(SEGMENTS[segment_name])
         target_delay = delay if delay is not None else baseline['delay']
         target_loss = loss if loss is not None else baseline['loss']
@@ -100,17 +114,19 @@ class FaultInjector:
             intf1, intf2 = link.intf1, link.intf2
             intf_names = (intf1.name, intf2.name)
 
-            # Apply impairment using Mininet TCIntf config
-            intf1.config(bw=target_bw, delay=target_delay, loss=target_loss)
-            intf2.config(bw=target_bw, delay=target_delay, loss=target_loss)
-
-            # Verify impairment is present on at least one interface
-            qdisc_out = intf1.cmd('tc qdisc show dev', intf1.name)
-            if delay is not None and 'netem' not in qdisc_out and 'delay' not in qdisc_out:
-                # Some tc versions format differently, check intf2 as well
-                qdisc_out2 = intf2.cmd('tc qdisc show dev', intf2.name)
-                if 'netem' not in qdisc_out2:
-                    raise RuntimeError(f'Failed to verify netem qdisc on {intf_names}: {qdisc_out}')
+            # Retain restoration ownership before the first interface changes.
+            pending = FaultInjectionRecord(time.time(), segment_name, intf_names,
+                                           fault_type, params, baseline, True)
+            self.active_faults[segment_name] = pending
+            try:
+                for intf in (intf1, intf2):
+                    self._configure(intf, params)
+            except BaseException as exc:
+                try:
+                    self.restore_fault(segment_name)
+                except Exception as cleanup:
+                    raise RuntimeError(f'Fault application failed: {exc}; rollback failed: {cleanup}') from exc
+                raise
 
         record = FaultInjectionRecord(
             timestamp=time.time(),
@@ -134,11 +150,28 @@ class FaultInjector:
         link = self.find_segment_link(segment_name)
         if link is not None:
             intf1, intf2 = link.intf1, link.intf2
-            intf1.config(bw=orig['bw'], delay=orig['delay'], loss=orig['loss'])
-            intf2.config(bw=orig['bw'], delay=orig['delay'], loss=orig['loss'])
+            errors = []
+            for intf in (intf1, intf2):
+                try:
+                    self._configure(intf, orig)
+                except Exception as exc:
+                    errors.append(f'{intf.name}: {exc}')
+            if errors:
+                raise RuntimeError('Restoration failed: ' + '; '.join(errors))
 
         del self.active_faults[segment_name]
         return True
+
+    @staticmethod
+    def _configure(intf, params):
+        """TCIntf returns command output even when tc fails: inspect every result."""
+        result = intf.config(bw=params['bw'], delay=params['delay'], loss=params['loss'],
+                             max_queue_size=params.get('max_queue_size', 1000))
+        if not isinstance(result, dict) or any(str(out).strip() for out in result.get('tcoutputs', [])):
+            raise RuntimeError(f'tc configuration failed on {intf.name}: {result}')
+        output = intf.cmd('tc qdisc show dev', intf.name)
+        if 'netem' not in output or 'htb' not in output:
+            raise RuntimeError(f'Expected HTB/netem qdisc missing on {intf.name}: {output}')
 
     def restore_all(self):
         """Restore all active impairments."""
@@ -158,11 +191,11 @@ def inject_fault(net, segment_name: str,
                  loss: Optional[float] = None,
                  bw: Optional[float] = None):
     """
-    Context manager for safe, guaranteed-cleanup fault injection.
+    Context manager that attempts restoration and reports cleanup failures.
     """
     injector = FaultInjector(net)
-    injector.apply_fault(segment_name, delay=delay, loss=loss, bw=bw)
     try:
+        injector.apply_fault(segment_name, delay=delay, loss=loss, bw=bw)
         yield injector
     finally:
         injector.restore_all()

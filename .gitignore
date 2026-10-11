@@ -25,14 +25,42 @@ wheels/
 venv/
 ENV/
 
-# Data, metrics and logs
-data/
+# Local runtime, measurements and service state (reviewed: raw probe reports,
+# Prometheus TSDB, Grafana databases, logs; curated evidence belongs in docs/)
+/data/
 *.log
 *.pid
-results/
-temp/
-prometheus_data/
-.runtime/
+/results/monitoring_*/
+/results/phase*_verification_*/
+/results/traffic_metrics_*.json
+/temp/
+/prometheus_data/
+/.runtime/
+
+# Secrets and private local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+/credentials.json
+/.aws/
+/.codex/config.toml
+
+# Agent indexes and generated context (AGENTS.md is maintained and published)
+/.fullerenes/
+/CLAUDE.md
+/.cursor/rules/fullerenes.mdc
+node_modules/
+
+# Test / tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.tmp
+*.bak
 
 # IDE / OS
 .idea/
@@ -40,3 +68,4 @@ prometheus_data/
 *.swp
 *.swo
 .DS_Store
+Thumbs.db

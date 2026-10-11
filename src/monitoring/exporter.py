@@ -6,6 +6,12 @@ from copy import deepcopy
 import math
 import threading
 import time
+import sys
+from pathlib import Path
+
+# Support the documented direct-file entry point as well as python -m.
+if __package__ in (None, ''):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from prometheus_client import CollectorRegistry, start_http_server
 from prometheus_client.core import GaugeMetricFamily, CounterMetricFamily
@@ -78,8 +84,11 @@ class MeasurementCollector:
                     if key == 'timestamp' and value is None:
                         raise ValueError('Every measurement requires a timestamp')
                     if value is not None and (not isinstance(value, (int, float))
+                                              or isinstance(value, bool)
                                               or not math.isfinite(value) or value < 0):
                         raise ValueError(f'Invalid measurement field: {key}')
+                if group == 'icmp' and row.get('packet_loss_percent') is not None and row['packet_loss_percent'] > 100:
+                    raise ValueError('Packet loss must be between 0 and 100 percent')
         anomaly_summary = self.detector.analyze_cycle(snapshot)
         localisation_summary = self.localiser.localise(snapshot, anomaly_summary)
         with self._lock:
@@ -177,9 +186,15 @@ class MeasurementCollector:
         if localisation_summary is not None:
             yield GaugeMetricFamily(
                 'cloud_fault_detected',
-                'One if a faulty segment was localized, zero if network is healthy.',
-                value=int(localisation_summary.status != 'healthy'),
+                'One if degraded ICMP paths were observed; not proof of a segment fault.',
+                value=int(bool(localisation_summary.anomalous_paths)),
             )
+            state = GaugeMetricFamily('cloud_fault_localisation_status',
+                                      'One-hot inference status; inconclusive means insufficient or conflicting observations.',
+                                      labels=['status'])
+            for status in ('healthy', 'localised', 'ambiguous', 'inconclusive'):
+                state.add_metric([status], int(localisation_summary.status == status))
+            yield state
             fault_cand = GaugeMetricFamily(
                 'cloud_fault_candidate',
                 'One if segment is an inferred faulty segment candidate.',
@@ -213,6 +228,19 @@ def metrics_server(collector, port=9200):
         thread.join(timeout=3)
 
 
+def load_report(collector, path):
+    """Reject corrupt updates visibly and clear stale successful measurements."""
+    import json
+    try:
+        collector.update(json.loads(Path(path).read_text()), 0.0)
+    except Exception as exc:
+        collector.collection_failed()
+        print(f'Failed to load measurement report {path}: {type(exc).__name__}: {exc}',
+              file=sys.stderr, flush=True)
+        return False
+    return True
+
+
 def main():
     import argparse
     import json
@@ -225,6 +253,10 @@ def main():
     parser.add_argument('--report', type=Path, help='Specific JSON report to load; defaults to latest in results/')
     parser.add_argument('--results-dir', type=Path, default=root / 'results', help='Directory to monitor for reports')
     args = parser.parse_args()
+    if not 1 <= args.port <= 65535:
+        parser.error('port must be between 1 and 65535')
+    if args.report and not args.report.is_file():
+        parser.error(f'report does not exist: {args.report}')
 
     collector = MeasurementCollector()
     report_file = args.report
@@ -234,15 +266,11 @@ def main():
             report_file = candidates[-1]
 
     if report_file and report_file.is_file():
-        try:
-            data = json.loads(report_file.read_text())
-            collector.update(data, 0.0)
+        if load_report(collector, report_file):
             print(f'Loaded measurement report: {report_file}', flush=True)
-        except Exception as exc:
-            print(f'Warning: failed to load {report_file}: {exc}', file=sys.stderr)
 
-    print(f'Serving Prometheus metrics on http://127.0.0.1:{args.port}/metrics', flush=True)
     with metrics_server(collector, args.port):
+        print(f'Serving Prometheus metrics on http://127.0.0.1:{args.port}/metrics', flush=True)
         try:
             while True:
                 time.sleep(1)
@@ -250,14 +278,14 @@ def main():
                     candidates = sorted(args.results_dir.glob('**/traffic_metrics_*.json'), key=lambda p: p.stat().st_mtime)
                     if candidates and candidates[-1] != report_file:
                         report_file = candidates[-1]
-                        try:
-                            data = json.loads(report_file.read_text())
-                            collector.update(data, 0.0)
-                        except Exception:
-                            pass
+                        load_report(collector, report_file)
         except KeyboardInterrupt:
             print('\nExporter stopped.', flush=True)
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except OSError as exc:
+        print(f'Exporter startup/runtime failure: {exc}', file=sys.stderr)
+        sys.exit(1)

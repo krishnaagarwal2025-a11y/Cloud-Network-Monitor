@@ -1,3 +1,7 @@
+> Historical engineering record. For the current audited source and verification
+> status, see [audit-2026-10-11.md](audit-2026-10-11.md). Earlier PASS statements
+> refer to their saved runs, not live acceptance of the changes in this audit.
+
 # Phase 3 engineering record — 11 October 2026
 
 ## Live acceptance update: PASSED

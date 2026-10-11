@@ -1,18 +1,6 @@
 # Core monitoring & metrics
-prometheus-client>=0.20.0
+prometheus-client>=0.20.0,<1.0
 
-# HTTP & Network testing
-requests>=2.31.0
-urllib3>=2.2.0
-
-# Data analysis & anomaly detection
-numpy>=1.26.0
-scipy>=1.12.0
-scikit-learn>=1.4.0
-pandas>=2.2.0
-
-# Plotting & report visualization
-matplotlib>=3.8.0
-
-# Configuration
-pyyaml>=6.0.1
+# Mininet is provided by Ubuntu apt; see scripts/setup_env.sh.
+# The active probes use ping/curl/iperf3, and analysis uses the Python stdlib.
+# Optional plotting/ML packages are not required by the current implementation.

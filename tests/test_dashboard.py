@@ -44,9 +44,12 @@ class TestDashboard(unittest.TestCase):
         from src.monitoring.exporter import MeasurementCollector, metrics_server
         from src.monitoring.prometheus import prometheus_server
         from src.monitoring.grafana import grafana_server, api, DASHBOARD_UID
+        from src.monitoring.grafana import query_panel
+        from src.monitoring.prometheus import wait_query
         from scripts.verify_phase4 import free_port
 
         collector = MeasurementCollector()
+        collector.update(json.loads((ROOT / 'tests/fixtures/simulated_baseline.json').read_text()))
         with TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             exporter_port = free_port()
@@ -72,6 +75,20 @@ class TestDashboard(unittest.TestCase):
 
                         dashboard = api(grafana_port, f'/api/dashboards/uid/{DASHBOARD_UID}')
                         self.assertEqual(dashboard['dashboard']['uid'], DASHBOARD_UID)
+                        wait_query(prom_port, 'cloud_measurement_cycle_success',
+                                   lambda rows: len(rows) == 1 and float(rows[0]['value'][1]) == 1)
+                        # Range panels need scrape history after their aligned start;
+                        # a single instant sample can fall after the last range step.
+                        wait_query(prom_port, 'count_over_time(cloud_measurement_cycle_success[5s])',
+                                   lambda rows: len(rows) == 1 and float(rows[0]['value'][1]) >= 3)
+                        import time
+                        end = int(time.time() * 1000)
+                        for uid in (DASHBOARD_UID, 'cloud-anomaly-detection'):
+                            dashboard = api(grafana_port, f'/api/dashboards/uid/{uid}')
+                            self.assertTrue(dashboard['meta']['provisioned'])
+                            for panel in dashboard['dashboard']['panels']:
+                                with self.subTest(uid=uid, panel=panel['title']):
+                                    self.assertTrue(numbers(query_panel(grafana_port, panel, end - 60000, end)))
 
 
 if __name__ == '__main__':

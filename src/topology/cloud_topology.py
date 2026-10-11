@@ -220,22 +220,15 @@ def run_interactive():
     """Start topology and drop into Mininet interactive CLI."""
     setLogLevel('info')
     info('*** Building Cloud Application Network Topology\n')
-    net = create_network(interactive=True)
-    
-    info('*** Starting Network\n')
-    net.start()
-    
-    info('\n*** Topology Nodes Summary:\n')
-    for h in net.hosts:
-        info(f'  Host: {h.name:<10} IP: {h.IP():<15} MAC: {h.MAC()}\n')
-    for s in net.switches:
-        info(f'  Switch: {s.name:<10}\n')
-        
-    info('\n*** Entering Mininet CLI. Type "exit" or "quit" to stop.\n')
-    CLI(net)
-    
-    info('*** Stopping Network\n')
-    net.stop()
+    from src.topology.lifecycle import experiment_network
+    with experiment_network() as net:
+        info('\n*** Topology Nodes Summary:\n')
+        for host in net.hosts:
+            info(f'  Host: {host.name:<10} IP: {host.IP():<15} MAC: {host.MAC()}\n')
+        for switch in net.switches:
+            info(f'  Switch: {switch.name:<10}\n')
+        info('\n*** Entering Mininet CLI. Type "exit" or "quit" to stop.\n')
+        CLI(net)
 
 
 if __name__ == '__main__':

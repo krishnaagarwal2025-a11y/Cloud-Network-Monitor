@@ -44,7 +44,7 @@ class TestFaultInjector(unittest.TestCase):
                 _ = 1 / 0
 
         # After exception, active fault must be cleaned up
-        self.assertEqual(len(self.injector.active_faults), 0)
+        self.assertEqual(len(inj.active_faults), 0)
 
 
 if __name__ == '__main__':

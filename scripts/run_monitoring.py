@@ -4,6 +4,7 @@
 import argparse
 from contextlib import ExitStack
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -36,9 +37,15 @@ def run(cycles=0, interval=5, exporter_port=9200, prometheus_port=9091, output_d
             try:
                 from src.monitoring.prometheus import get_json
                 get_json(f'http://127.0.0.1:{prometheus_port}/api/v1/status/buildinfo')
-                print(f'Prometheus already active on port {prometheus_port}; reusing existing instance.', flush=True)
-            except Exception:
+            except (OSError, ValueError):
                 stack.enter_context(prometheus_server(directory / 'prometheus', exporter_port, prometheus_port))
+            else:
+                targets = get_json(f'http://127.0.0.1:{prometheus_port}/api/v1/targets')
+                expected = f'http://127.0.0.1:{exporter_port}/metrics'
+                if not any(t.get('scrapeUrl') == expected and t.get('labels', {}).get('job') == 'cloud-network-monitor'
+                           for t in targets['data']['activeTargets']):
+                    raise RuntimeError(f'Existing Prometheus does not scrape {expected}; review its configuration')
+                print(f'Prometheus already active on port {prometheus_port}; verified target; reusing instance.', flush=True)
 
             if grafana:
                 try:
@@ -94,8 +101,11 @@ def main():
     parser.add_argument('--grafana', action='store_true', help='Start the provisioned dashboard')
     parser.add_argument('--grafana-port', type=int, default=3000)
     args = parser.parse_args()
-    if args.cycles < 0 or args.interval < 0:
+    if args.cycles < 0 or not math.isfinite(args.interval) or args.interval < 0:
         parser.error('cycles and interval must be nonnegative')
+    ports = [args.exporter_port, args.prometheus_port] + ([args.grafana_port] if args.grafana else [])
+    if any(not 1 <= p <= 65535 for p in ports) or len(set(ports)) != len(ports):
+        parser.error('service ports must be distinct and between 1 and 65535')
     if os.geteuid() != 0:
         parser.error('Mininet needs sudo')
     def interrupted(signum, frame):

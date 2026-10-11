@@ -1,3 +1,10 @@
+> Historical engineering record. For the current audited source and verification
+> status, see [audit-2026-10-11.md](audit-2026-10-11.md). Earlier PASS statements
+> refer to their saved runs, not live acceptance of the changes in this audit.
+> Current live Phase 6 uses deterministic 100% app-DB loss and delay overrides
+> per direction; older 25% and +RTT descriptions below are superseded. Cleanup
+> is attempted and failures are reported; successful kernel rollback is unverified.
+
 # Cloud Application Network Monitoring — Project Progress Record
 
 Date: 11 October 2026

@@ -89,7 +89,7 @@ def generate_simulated_cycle(base_report, segment_impairments=None, timestamp=No
     return cycle
 
 
-def verify_phase6(simulated: bool = False, hold_seconds: int = 0):
+def verify_phase6(simulated: bool = False, hold_seconds: int = 0, baseline_report=None):
     directory = ROOT / 'results' / f'phase6_verification_{time.time_ns()}'
     directory.mkdir(parents=True, exist_ok=False)
     mode = 'simulated_fault_injection' if simulated else 'live_mininet'
@@ -105,10 +105,10 @@ def verify_phase6(simulated: bool = False, hold_seconds: int = 0):
             stack.enter_context(prometheus_server(directory / 'prometheus', exporter_port, prom_port))
 
             if simulated:
-                # Load baseline template from verified Phase 4 record
-                p4_dir = ROOT / 'results' / 'phase4_verification_1791724549436935814'
-                p4_meta = json.loads((p4_dir / 'verification.json').read_text())
-                base_report = json.loads(Path(p4_meta['stages'][0]['report']).read_text())
+                # Portable, explicitly synthetic fixture; optional recorded baseline.
+                source = Path(baseline_report or ROOT / 'tests/fixtures/simulated_baseline.json')
+                base_report = json.loads(source.read_text())
+                result['baseline_source'] = str(source)
                 manager = None
                 injector = None
             else:
@@ -145,7 +145,7 @@ def verify_phase6(simulated: bool = False, hold_seconds: int = 0):
             print(" Stage 1 Baseline PASSED (0 anomalies, status=healthy)", flush=True)
 
             # Stage 2: Injected Latency Fault on seg_client_edge
-            print("\n[Phase 6] Running Stage 2: Injected Latency Fault on seg_client_edge (+50ms)...", flush=True)
+            print("\n[Phase 6] Stage 2: client-edge delay (simulated RTT +50ms; live egress delay 50ms)...", flush=True)
             if simulated:
                 report_fault1 = generate_simulated_cycle(base_report, {'seg_client_edge': {'delay_ms': 50.0}})
             else:
@@ -180,14 +180,16 @@ def verify_phase6(simulated: bool = False, hold_seconds: int = 0):
                 injector.restore_fault('seg_client_edge')
 
             # Stage 3: Injected Loss Fault on seg_app_db
-            print("\n[Phase 6] Running Stage 3: Injected Packet Loss on seg_app_db (25%)...", flush=True)
+            print("\n[Phase 6] Stage 3: app-db loss (simulation 25%; live 100% deterministic outage)...", flush=True)
             if simulated:
                 report_fault2 = generate_simulated_cycle(base_report, {'seg_app_db': {'loss_percent': 25.0}})
             else:
-                injector.apply_fault('seg_app_db', loss=25.0)
+                # Three ping packets cannot reliably observe random 25% loss.
+                injector.apply_fault('seg_app_db', loss=100.0)
                 report_fault2 = manager.collect_all_kpis(icmp_count=3, http_count=3, iperf_duration=2)
 
             evidence_fault2 = check_cycle(collector, report_fault2, prom_port, directory, 'fault_app_db_loss')
+            evidence_fault2['fault_settings'] = {'loss_percent': 25.0 if simulated else 100.0}
             res_fault2 = collector._localisation_summary
             anom_fault2 = collector._anomaly_summary
 
@@ -266,7 +268,7 @@ def verify_phase6(simulated: bool = False, hold_seconds: int = 0):
                 print(f"Holding for {hold_seconds}s...", flush=True)
                 time.sleep(hold_seconds)
 
-        result['network_cleanup_success'] = bool(simulated) or state.get('cleanup_success', False)
+        result['network_cleanup_success'] = None if simulated else state.get('cleanup_success', False)
         result['success'] = bool(simulated) or state.get('cleanup_success', False)
         status = 0 if result['success'] else 1
 
@@ -287,6 +289,7 @@ def main():
     parser.add_argument('--simulated', action='store_true',
                         help='Execute unprivileged simulation; clearly marked as simulated_fault_injection')
     parser.add_argument('--hold-seconds', type=int, default=0, help='Time to keep state for inspection')
+    parser.add_argument('--baseline-report', type=Path, help='Optional baseline for simulated mode')
     args = parser.parse_args()
 
     if not args.simulated and os.geteuid() != 0:
@@ -298,7 +301,9 @@ def main():
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, interrupted)
-    return verify_phase6(simulated=args.simulated, hold_seconds=args.hold_seconds)
+    if args.baseline_report and not args.simulated:
+        parser.error('baseline-report requires --simulated')
+    return verify_phase6(**vars(args))
 
 
 if __name__ == '__main__':

@@ -63,6 +63,9 @@ def parse_ping_output(raw_output: str) -> Dict[str, Any]:
         packets_sent = int(pkt_match.group(1))
         packets_received = int(pkt_match.group(2))
         packet_loss_percent = float(pkt_match.group(3))
+        if not (0 <= packets_received <= packets_sent and 0 <= packet_loss_percent <= 100):
+            packets_sent = packets_received = 0
+            packet_loss_percent = None
 
     # Match RTT statistics
     # e.g.: "rtt min/avg/max/mdev = 0.038/0.041/0.045/0.003 ms"
@@ -74,7 +77,8 @@ def parse_ping_output(raw_output: str) -> Dict[str, Any]:
     if rtt_match:
         try:
             values = [float(rtt_match.group(i)) for i in range(1, 5)]
-            if all(math.isfinite(v) and v >= 0 for v in values):
+            if (all(math.isfinite(v) and v >= 0 for v in values)
+                    and values[0] <= values[1] <= values[2]):
                 rtt_min, rtt_avg, rtt_max, rtt_mdev = values
         except ValueError:
             pass

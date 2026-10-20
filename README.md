@@ -2,6 +2,10 @@
 
 **A Multi-Layer, Real-Time Framework for Measuring, Analysing and Visualising the Network Performance of Cloud-Hosted Applications**
 
+**Current status (20 October 2026):** the end-to-end experiment and portable
+acceptance suite are implemented. Fresh privileged acceptance of the final
+source is pending sudo authentication. See [the current verification report](docs/verification-2026-10-20.md).
+
 ## Overview and problem statement
 
 This academic project investigates network and application performance in an
@@ -233,8 +237,8 @@ sudo .venv/bin/python scripts/run_monitoring.py --cycles 3 --grafana
 
 The live runner needs sudo for Mininet and link shaping. It creates its own
 network; it reuses an existing Prometheus only after checking its scrape target.
-Existing Grafana reuse checks health, but users must verify its datasource and
-provisioning. Owned services stop on exit; reused services remain running.
+Existing Grafana reuse verifies the project Prometheus URL and both provisioned
+dashboards; a healthy but unrelated instance is refused. Owned services stop on exit; reused services remain running.
 Defaults can be overridden with `--exporter-port`, `--prometheus-port`,
 `--grafana-port`, `--interval` and `--cycles` (0 means continuous).
 
@@ -415,3 +419,50 @@ No project license is present. The owner must select an appropriate license befo
 claiming the repository is open source. Third-party dependencies retain their
 own licenses; Fullerenes is MIT and Grafana OSS is AGPLv3. This audit did not
 choose a license on the owner's behalf.
+
+## Final experiment and acceptance (20 October 2026)
+
+The original architecture now has a reproducible end-to-end experiment covering
+normal operation, edge delay, app-DB loss, ambiguous core delay, bandwidth
+restriction, application outage and measured recovery. Statistical warm-up uses
+complete cycles, not individual HTTP repetitions. Thresholds and experiment
+settings are in `config/analysis.json` and `config/experiment.json`.
+
+```bash
+# Portable checks: units, real local monitoring services, explicitly synthetic faults
+python3 scripts/verify_all.py
+
+# Full live acceptance: actual Mininet, kernel faults, dashboards and recovery
+sudo python3 scripts/verify_all.py --live
+
+# Finite demonstration; prints the dashboard URL and saves reports/figures
+sudo python3 scripts/run_demo.py --hold-seconds 180
+
+# Software-only practice mode: never claim this generated real network traffic
+python3 scripts/run_demo.py --simulated
+```
+
+Each demo saves `experiment.json`, immutable cycle reports, per-detector evaluation,
+`summary.md`, `report.html`, and four SVG charts in a unique
+`results/end_to_end_<time>/` directory. Mode labels, unknown values, ambiguous
+candidates and missed detections remain visible. Live mode records qdisc/class
+configuration before changes, verifies actual delay/loss/rate/queue parameters
+on both interfaces and checks restoration before accepting recovery. Ground-truth
+condition/injection panels are separate from detection and candidate panels.
+
+The portable acceptance command is verified. **Fresh privileged acceptance of
+the final source remains pending because this agent session cannot authenticate
+sudo.** Historical live Phase 3/4 evidence is retained with its original date;
+it does not establish acceptance of the final experiment. Browser layout review
+was unavailable because the computer-use environment had no browser. Grafana's
+real panel query/data path was verified independently.
+
+- [Current verification and milestone status](docs/verification-2026-10-20.md)
+- [Methodology, evaluation and limits](docs/methodology.md)
+- [Reproducible demonstration procedure](docs/demo-guide.md)
+- [Reviewed historical live evidence](docs/evidence/historical-live-phase4.json)
+- [Historical measured HTTP recovery figure](docs/figures/historical-live-http.svg)
+
+No raw service data, secrets, runtime downloads or local agent indexes are
+published. There is no claim of universal root-cause accuracy, production-cloud
+validation or a completed fresh-host installation test.

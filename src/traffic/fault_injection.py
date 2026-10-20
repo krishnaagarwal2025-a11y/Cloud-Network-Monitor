@@ -184,6 +184,54 @@ class FaultInjector:
         if errors:
             raise RuntimeError('Failed to restore some faults: ' + '; '.join(errors))
 
+    def snapshot_segment(self, segment_name):
+        """Capture actual kernel configuration on both owned segment interfaces."""
+        link = self.find_segment_link(segment_name)
+        if link is None:
+            return {'mode': 'simulation', 'interfaces': []}
+        interfaces = []
+        for intf in (link.intf1, link.intf2):
+            qdisc = intf.cmd('tc qdisc show dev', intf.name)
+            classes = intf.cmd('tc class show dev', intf.name)
+            interfaces.append({'interface': intf.name, 'qdisc': qdisc, 'classes': classes,
+                               'parameters': self.parse_state(qdisc, classes)})
+        return {'mode': 'live_kernel', 'interfaces': interfaces}
+
+    @staticmethod
+    def parse_state(qdisc, classes):
+        """Parse tc's configuration fields, ignoring counters and timing noise."""
+        if 'qdisc htb ' not in qdisc or 'qdisc netem ' not in qdisc:
+            raise RuntimeError('Owned segment is missing its expected HTB/netem hierarchy')
+        delay = re.search(r'\bdelay\s+([\d.]+)(us|ms|s)\b', qdisc)
+        loss = re.search(r'\bloss\s+(?:random\s+)?([\d.]+)%', qdisc)
+        rate = re.search(r'\brate\s+([\d.]+)([KMG]?)bit\b', classes, re.IGNORECASE)
+        limit = re.search(r'\blimit\s+(\d+)\b', qdisc)
+        if rate is None or limit is None:
+            raise RuntimeError('Unable to verify owned segment bandwidth or queue limit')
+        return {
+            'delay_ms': float(delay[1]) * {'us': 0.001, 'ms': 1, 's': 1000}[delay[2]] if delay else 0.0,
+            'loss': float(loss[1]) if loss else 0.0,
+            'bw': float(rate[1]) * {'': 0.000001, 'K': 0.001, 'M': 1, 'G': 1000}[rate[2].upper()],
+            'max_queue_size': int(limit[1]),
+        }
+
+    def verify_segment(self, segment_name, expected=None):
+        """Verify actual delay, loss, rate and queue against the requested config."""
+        snapshot = self.snapshot_segment(segment_name)
+        if self.net is None:
+            return snapshot
+        config = expected or SEGMENTS[segment_name]
+        match = re.fullmatch(r'([\d.]+)(us|ms|s)', config['delay'])
+        wanted = {'delay_ms': float(match[1]) * {'us': 0.001, 'ms': 1, 's': 1000}[match[2]],
+                  'loss': config['loss'], 'bw': config['bw'],
+                  'max_queue_size': config.get('max_queue_size', 1000)}
+        for interface in snapshot['interfaces']:
+            for key, value in wanted.items():
+                if not math.isclose(interface['parameters'][key], value, rel_tol=0.001, abs_tol=0.001):
+                    raise RuntimeError(f'Actual {key} on {interface["interface"]} does not match '
+                                       f'requested value {value}: {interface["parameters"][key]}')
+        return snapshot
+
 
 @contextmanager
 def inject_fault(net, segment_name: str,

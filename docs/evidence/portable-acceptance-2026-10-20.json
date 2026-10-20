@@ -1,0 +1,105 @@
+{
+  "date": "2026-10-20",
+  "mode": "portable_and_simulated",
+  "success": true,
+  "tests": {
+    "run": 100,
+    "passed": 98,
+    "skipped": 2,
+    "skip_reason": "Live Mininet tests require root"
+  },
+  "stages": [
+    {
+      "stage": "tests",
+      "exit_code": 0
+    },
+    {
+      "stage": "prometheus_config",
+      "exit_code": 0
+    },
+    {
+      "stage": "setup_syntax",
+      "exit_code": 0
+    },
+    {
+      "stage": "whitespace",
+      "exit_code": 0
+    },
+    {
+      "stage": "phase6_simulation",
+      "exit_code": 0
+    },
+    {
+      "stage": "end_to_end_simulation",
+      "exit_code": 0
+    }
+  ],
+  "simulation_cycles": 31,
+  "simulation_evaluation": {
+    "unit": "one complete collection cycle",
+    "detectors": {
+      "threshold": {
+        "true_positive": 10,
+        "false_positive": 0,
+        "true_negative": 16,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "false_positive_rate": 0.0,
+        "detection_delay_seconds": {
+          "edge_delay": 0.0014770030975341797,
+          "database_loss": 0.003009319305419922,
+          "core_ambiguity": 0.00450587272644043,
+          "edge_bandwidth": 0.006192207336425781,
+          "web_unavailable": 0.009778976440429688
+        }
+      },
+      "ewma": {
+        "true_positive": 8,
+        "false_positive": 0,
+        "true_negative": 16,
+        "false_negative": 2,
+        "precision": 1.0,
+        "recall": 0.8,
+        "false_positive_rate": 0.0,
+        "detection_delay_seconds": {
+          "edge_delay": 0.0014770030975341797,
+          "database_loss": 0.003009319305419922,
+          "core_ambiguity": 0.00450587272644043,
+          "edge_bandwidth": 0.006192207336425781
+        }
+      },
+      "zscore": {
+        "true_positive": 5,
+        "false_positive": 0,
+        "true_negative": 16,
+        "false_negative": 5,
+        "precision": 1.0,
+        "recall": 0.5,
+        "false_positive_rate": 0.0,
+        "detection_delay_seconds": {
+          "edge_delay": 0.0014770030975341797,
+          "database_loss": 0.003009319305419922,
+          "edge_bandwidth": 0.006192207336425781
+        }
+      }
+    },
+    "localisation": {
+      "correct_clean": 23,
+      "exact_match": 4,
+      "ambiguous_contains_target": 2,
+      "missed_target": 2
+    },
+    "limitations": [
+      "Small controlled experiment; rates are not production accuracy estimates.",
+      "Fault-cycle labels come from requested/applied conditions, not measured magnitude.",
+      "Detection delay includes probe execution and collection cadence.",
+      "Bandwidth-only faults may not be identifiable from ICMP paths.",
+      "Candidate confidence is a single-fault heuristic, not a calibrated probability."
+    ]
+  },
+  "live_acceptance": "BLOCKED: sudo requires interactive authentication",
+  "browser_visual_review": "UNAVAILABLE: computer-use tool reported no available browser",
+  "local_acceptance_directory": "acceptance_1792491282260920133",
+  "local_simulation_directory": "end_to_end_1792491304192346634"
+}

@@ -1,3 +1,7 @@
+> Update, 20 October 2026: see [verification-2026-10-20.md](verification-2026-10-20.md)
+> for the final experiment, current acceptance results and privileged-test blocker.
+> The phase counts and claims below remain historical.
+
 > Historical engineering record. For the current audited source and verification
 > status, see [audit-2026-10-11.md](audit-2026-10-11.md). Earlier PASS statements
 > refer to their saved runs, not live acceptance of the changes in this audit.

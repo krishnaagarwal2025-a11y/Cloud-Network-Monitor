@@ -1,0 +1,23 @@
+{
+  "thresholds": {
+    "latency_ms": {
+      "client->edge_gw": 25.0,
+      "client->web_srv": 40.0,
+      "client->api_srv": 40.0,
+      "client->db_srv": 45.0,
+      "web_srv->db_srv": 10.0,
+      "default": 50.0
+    },
+    "packet_loss_ratio": 0.01,
+    "http_response_time_ms": 80.0,
+    "min_throughput_mbps": 50.0
+  },
+  "ewma_alpha": 0.3,
+  "ewma_k": 3.0,
+  "zscore_window": 15,
+  "zscore_thresh": 3.0,
+  "localisation": {
+    "latency_spike_threshold_ms": 20.0,
+    "loss_threshold_percent": 1.0
+  }
+}

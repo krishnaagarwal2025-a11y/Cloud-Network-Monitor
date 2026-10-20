@@ -1,0 +1,15 @@
+{
+  "baseline_cycles": 6,
+  "fault_cycles": 2,
+  "recovery_cycles": 3,
+  "icmp_count": 3,
+  "http_count": 3,
+  "iperf_duration": 2,
+  "scenarios": [
+    {"name": "edge_delay", "condition": "latency", "segment": "seg_client_edge", "parameters": {"delay": "50ms"}},
+    {"name": "database_loss", "condition": "loss", "segment": "seg_app_db", "parameters": {"loss": 100.0}},
+    {"name": "core_ambiguity", "condition": "latency", "segment": "seg_edge_lb", "parameters": {"delay": "40ms"}},
+    {"name": "edge_bandwidth", "condition": "bandwidth", "segment": "seg_client_edge", "parameters": {"bw": 20.0}},
+    {"name": "web_unavailable", "condition": "application_down", "segment": null, "parameters": {}}
+  ]
+}

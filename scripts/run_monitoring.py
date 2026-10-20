@@ -23,10 +23,10 @@ from scripts.run_traffic_test import save_results
 
 
 def run(cycles=0, interval=5, exporter_port=9200, prometheus_port=9091, output_dir=None,
-        grafana=False, grafana_port=3000):
+        grafana=False, grafana_port=3000, analysis_config=None):
     directory = Path(output_dir or ROOT / 'results' / f'monitoring_{time.time_ns()}')
     directory.mkdir(parents=True, exist_ok=False)
-    collector = MeasurementCollector()
+    collector = MeasurementCollector(analysis_config)
     state = {}
     completed = 0
     error = None
@@ -49,11 +49,13 @@ def run(cycles=0, interval=5, exporter_port=9200, prometheus_port=9091, output_d
 
             if grafana:
                 try:
-                    from src.monitoring.grafana import api
+                    from src.monitoring.grafana import api, validate_existing
                     api(grafana_port, '/api/health')
-                    print(f'Grafana already active on port {grafana_port}; reusing existing instance.', flush=True)
-                except Exception:
+                except (OSError, ValueError):
                     stack.enter_context(grafana_server(directory / 'grafana', prometheus_port, grafana_port))
+                else:
+                    validate_existing(grafana_port, prometheus_port)
+                    print(f'Grafana already active on port {grafana_port}; verified provisioning; reusing instance.', flush=True)
 
             net = stack.enter_context(experiment_network(state))
             manager = TrafficManager(net)
@@ -69,6 +71,7 @@ def run(cycles=0, interval=5, exporter_port=9200, prometheus_port=9091, output_d
                 start = time.monotonic()
                 try:
                     measurements = manager.collect_all_kpis(icmp_count=3, http_count=3, iperf_duration=2)
+                    measurements['measurement_mode'] = 'live_mininet'
                     collector.update(measurements, time.monotonic() - start)
                     path = save_results(measurements, directory)
                     completed += 1
@@ -100,6 +103,7 @@ def main():
     parser.add_argument('--prometheus-port', type=int, default=9091)
     parser.add_argument('--grafana', action='store_true', help='Start the provisioned dashboard')
     parser.add_argument('--grafana-port', type=int, default=3000)
+    parser.add_argument('--analysis-config', type=Path, help='Alternate analysis JSON; defaults to config/analysis.json')
     args = parser.parse_args()
     if args.cycles < 0 or not math.isfinite(args.interval) or args.interval < 0:
         parser.error('cycles and interval must be nonnegative')

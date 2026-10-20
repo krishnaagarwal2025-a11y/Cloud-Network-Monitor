@@ -49,7 +49,10 @@ class TestDashboard(unittest.TestCase):
         from scripts.verify_phase4 import free_port
 
         collector = MeasurementCollector()
-        collector.update(json.loads((ROOT / 'tests/fixtures/simulated_baseline.json').read_text()))
+        fixture = json.loads((ROOT / 'tests/fixtures/simulated_baseline.json').read_text())
+        fixture['measurement_mode'] = 'synthetic_simulation'
+        collector.experiment_state('baseline')
+        collector.update(fixture)
         with TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             exporter_port = free_port()

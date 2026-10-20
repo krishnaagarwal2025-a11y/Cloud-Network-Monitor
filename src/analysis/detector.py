@@ -21,6 +21,20 @@ import time
 from typing import Dict, List, Optional, Tuple, Any
 
 
+def statistical_cycle(report):
+    """One HTTP observation per path/cycle; repeated requests aren't independent cycles."""
+    grouped = {}
+    for row in report.get('http', []):
+        grouped.setdefault((row['source'], row['target']), []).append(row)
+    http = []
+    for (source, target), rows in grouped.items():
+        values = [r.get('response_time_ms') for r in rows]
+        valid = all(r.get('success') and v is not None for r, v in zip(rows, values))
+        http.append({'source': source, 'target': target, 'success': valid,
+                     'response_time_ms': sum(values) / len(values) if valid else None})
+    return {**report, 'http': http}
+
+
 @dataclass(frozen=True)
 class AnomalyRecord:
     timestamp: float
@@ -449,8 +463,9 @@ class CompositeAnomalyDetector:
         Returns a structured dictionary of results suitable for Prometheus export.
         """
         t_anomalies = self.threshold_detector.evaluate_cycle(report)
-        e_anomalies = self.ewma_detector.evaluate_cycle(report)
-        z_anomalies = self.zscore_detector.evaluate_cycle(report)
+        aggregated = statistical_cycle(report)
+        e_anomalies = self.ewma_detector.evaluate_cycle(aggregated)
+        z_anomalies = self.zscore_detector.evaluate_cycle(aggregated)
 
         all_anomalies = t_anomalies + e_anomalies + z_anomalies
 

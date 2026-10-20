@@ -33,6 +33,8 @@ ENV/
 /results/monitoring_*/
 /results/phase*_verification_*/
 /results/traffic_metrics_*.json
+/results/end_to_end_*/
+/results/acceptance_*/
 /temp/
 /prometheus_data/
 /.runtime/

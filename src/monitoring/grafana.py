@@ -32,6 +32,17 @@ def query_panel(port, panel, start_ms, end_ms):
     return api(port, '/api/ds/query', {'queries': queries, 'from': str(start_ms), 'to': str(end_ms)})
 
 
+def validate_existing(port, prometheus_port):
+    """Refuse healthy but unrelated dashboards/data sources without changing them."""
+    source = api(port, f'/api/datasources/uid/{DATASOURCE_UID}')
+    if source.get('type') != 'prometheus' or source.get('url', '').rstrip('/') != f'http://127.0.0.1:{prometheus_port}':
+        raise RuntimeError('Existing Grafana datasource does not point at the project Prometheus')
+    for uid in (DASHBOARD_UID, 'cloud-anomaly-detection'):
+        dashboard = api(port, f'/api/dashboards/uid/{uid}')
+        if not dashboard.get('meta', {}).get('provisioned') or dashboard['dashboard'].get('uid') != uid:
+            raise RuntimeError(f'Existing Grafana dashboard is missing or not provisioned: {uid}')
+
+
 @contextmanager
 def grafana_server(directory, prometheus_port=9091, port=3000, home=None):
     home = Path(home or GRAFANA_HOME).resolve()

@@ -47,13 +47,14 @@ METRICS = {
 class MeasurementCollector:
     """Collect independently of scrapes; swapping a snapshot prevents mixed cycles."""
 
-    def __init__(self):
+    def __init__(self, analysis_config=None):
         self._lock = threading.Lock()
         self._report = None
         self._anomaly_summary = None
         self._localisation_summary = None
-        self.detector = CompositeAnomalyDetector()
-        self.localiser = FaultLocaliser()
+        from src.analysis.configuration import load_analysis
+        self.detector, self.localiser, self.analysis_settings = load_analysis(analysis_config)
+        self._experiment_state = None
         self._duration = 0.0
         self._attempt_time = 0.0
         self._errors = 0
@@ -67,6 +68,9 @@ class MeasurementCollector:
             raise ValueError('Collection duration must be finite and nonnegative')
         if not isinstance(snapshot.get('success'), bool):
             raise ValueError('Measurement cycle success must be boolean')
+        if snapshot.get('measurement_mode', 'recorded_or_unspecified') not in (
+                'live_mininet', 'synthetic_simulation', 'recorded_or_unspecified'):
+            raise ValueError('Unknown measurement provenance')
         for group in GROUPS:
             rows = snapshot[group]
             if not isinstance(rows, list):
@@ -99,6 +103,22 @@ class MeasurementCollector:
             self._attempt_time = time.time()
             self._collection_ok = True
 
+    def analysis_snapshot(self):
+        """Return coherent, serializable findings rather than expose private state."""
+        with self._lock:
+            return {'anomalies': deepcopy(self._anomaly_summary),
+                    'localisation': (self._localisation_summary.to_dict()
+                                     if self._localisation_summary else None)}
+
+    def experiment_state(self, condition, segment=None, applied=False):
+        """Ground truth metadata is exported separately and never enters inference."""
+        if condition not in ('baseline', 'latency', 'loss', 'bandwidth', 'application_down', 'recovery'):
+            raise ValueError('Unknown experiment condition')
+        if segment is not None and segment not in ALL_SEGMENTS:
+            raise ValueError('Unknown experiment segment')
+        with self._lock:
+            self._experiment_state = (condition, segment, bool(applied))
+
     def collection_failed(self, duration=0.0):
         """Clear old values on an exception; exporter HTTP remains available."""
         with self._lock:
@@ -117,6 +137,7 @@ class MeasurementCollector:
             localisation_summary = self._localisation_summary
             duration, timestamp = self._duration, self._attempt_time
             ok, errors = self._collection_ok, self._errors
+            experiment = self._experiment_state
         yield GaugeMetricFamily('cloud_collection_success',
                                'One if the latest collection completed, including failed probes.',
                                value=int(ok))
@@ -126,8 +147,28 @@ class MeasurementCollector:
                                'Wall time of the latest collection attempt.', value=duration)
         yield CounterMetricFamily('cloud_collection_errors',
                                  'Collection exceptions since exporter startup.', value=errors)
+        if experiment is not None:
+            condition, segment, applied = experiment
+            phase = GaugeMetricFamily('cloud_experiment_condition',
+                                      'Requested demonstration condition, separate from measured detection.',
+                                      labels=['condition'])
+            for name in ('baseline', 'latency', 'loss', 'bandwidth', 'application_down', 'recovery'):
+                phase.add_metric([name], int(condition == name))
+            yield phase
+            injected = GaugeMetricFamily('cloud_injected_fault_active',
+                                         'Verified requested impairment; ground truth, not inferred diagnosis.',
+                                         labels=['segment'])
+            for name in ALL_SEGMENTS:
+                injected.add_metric([name], int(applied and segment == name))
+            yield injected
         if report is None:
             return
+        provenance = GaugeMetricFamily('cloud_measurement_source',
+                                       'One-hot measurement provenance; playback is never new live traffic.',
+                                       labels=['mode'])
+        for mode in ('live_mininet', 'synthetic_simulation', 'recorded_or_unspecified'):
+            provenance.add_metric([mode], int(report.get('measurement_mode', 'recorded_or_unspecified') == mode))
+        yield provenance
         yield GaugeMetricFamily('cloud_measurement_cycle_success',
                                'One if all baseline measurement checks passed.',
                                value=int(report['success']))
@@ -232,7 +273,9 @@ def load_report(collector, path):
     """Reject corrupt updates visibly and clear stale successful measurements."""
     import json
     try:
-        collector.update(json.loads(Path(path).read_text()), 0.0)
+        report = json.loads(Path(path).read_text())
+        report['measurement_mode'] = 'recorded_or_unspecified'
+        collector.update(report, 0.0)
     except Exception as exc:
         collector.collection_failed()
         print(f'Failed to load measurement report {path}: {type(exc).__name__}: {exc}',

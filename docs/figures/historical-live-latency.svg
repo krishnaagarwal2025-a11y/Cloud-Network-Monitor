@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 410" role="img" aria-label="Measured network latency during an application outage (historical live Mininet · 11 October 2026)">
+<rect width="100%" height="100%" fill="white"/>
+<text x="75" y="26" font-size="20" font-family="sans-serif">Measured network latency during an application outage</text>
+<text x="75" y="47" font-size="12" fill="#475569">historical live Mininet · 11 October 2026 · milliseconds · gaps mean unavailable</text>
+<rect x="322.50" y="65" width="495.00" height="240" fill="#fef3c7"/>
+<line x1="75" x2="1065" y1="305.00" y2="305.00" stroke="#e2e8f0"/>
+<text x="67" y="309.00" text-anchor="end" font-size="11">0.00</text>
+<line x1="75" x2="1065" y1="245.00" y2="245.00" stroke="#e2e8f0"/>
+<text x="67" y="249.00" text-anchor="end" font-size="11">5.50</text>
+<line x1="75" x2="1065" y1="185.00" y2="185.00" stroke="#e2e8f0"/>
+<text x="67" y="189.00" text-anchor="end" font-size="11">11.00</text>
+<line x1="75" x2="1065" y1="125.00" y2="125.00" stroke="#e2e8f0"/>
+<text x="67" y="129.00" text-anchor="end" font-size="11">16.50</text>
+<line x1="75" x2="1065" y1="65.00" y2="65.00" stroke="#e2e8f0"/>
+<text x="67" y="69.00" text-anchor="end" font-size="11">22.00</text>
+<text x="75.00" y="327" text-anchor="middle" font-size="11">1</text>
+<text x="570.00" y="327" text-anchor="middle" font-size="11">2</text>
+<text x="1065.00" y="327" text-anchor="middle" font-size="11">3</text>
+<text x="570.0" y="347" text-anchor="middle" font-size="12">Collection cycle (not evenly spaced time)</text>
+<circle cx="75.00" cy="120.71" r="2.5" fill="#2563eb"/>
+<circle cx="570.00" cy="119.68" r="2.5" fill="#2563eb"/>
+<circle cx="1065.00" cy="120.77" r="2.5" fill="#2563eb"/>
+<polyline points="75.00,120.71 570.00,119.68 1065.00,120.77" fill="none" stroke="#2563eb" stroke-width="2"/>
+<text x="75" y="368" fill="#2563eb" font-size="12">client → api_srv</text>
+<circle cx="75.00" cy="97.79" r="2.5" fill="#dc2626"/>
+<circle cx="570.00" cy="96.77" r="2.5" fill="#dc2626"/>
+<circle cx="1065.00" cy="90.71" r="2.5" fill="#dc2626"/>
+<polyline points="75.00,97.79 570.00,96.77 1065.00,90.71" fill="none" stroke="#dc2626" stroke-width="2"/>
+<text x="405" y="368" fill="#dc2626" font-size="12">client → db_srv</text>
+<circle cx="75.00" cy="187.33" r="2.5" fill="#16a34a"/>
+<circle cx="570.00" cy="187.82" r="2.5" fill="#16a34a"/>
+<circle cx="1065.00" cy="186.93" r="2.5" fill="#16a34a"/>
+<polyline points="75.00,187.33 570.00,187.82 1065.00,186.93" fill="none" stroke="#16a34a" stroke-width="2"/>
+<text x="735" y="368" fill="#16a34a" font-size="12">client → edge_gw</text>
+<circle cx="75.00" cy="120.81" r="2.5" fill="#9333ea"/>
+<circle cx="570.00" cy="118.58" r="2.5" fill="#9333ea"/>
+<circle cx="1065.00" cy="117.85" r="2.5" fill="#9333ea"/>
+<polyline points="75.00,120.81 570.00,118.58 1065.00,117.85" fill="none" stroke="#9333ea" stroke-width="2"/>
+<text x="75" y="387" fill="#9333ea" font-size="12">client → web_srv</text>
+<circle cx="75.00" cy="276.24" r="2.5" fill="#ea580c"/>
+<circle cx="570.00" cy="276.60" r="2.5" fill="#ea580c"/>
+<circle cx="1065.00" cy="276.61" r="2.5" fill="#ea580c"/>
+<polyline points="75.00,276.24 570.00,276.60 1065.00,276.61" fill="none" stroke="#ea580c" stroke-width="2"/>
+<text x="405" y="387" fill="#ea580c" font-size="12">web_srv → db_srv</text>
+</svg>

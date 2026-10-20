@@ -83,6 +83,7 @@ def verify(recorded_directory=None, hold_seconds=0):
                 stack.callback(manager.teardown_services)
                 manager.setup_services()
             for stage in ('baseline', 'application_down', 'recovery'):
+                collector.experiment_state(stage)
                 if recorded_directory:
                     report = records[stage]
                 else:

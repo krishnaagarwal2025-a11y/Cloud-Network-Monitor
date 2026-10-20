@@ -1,0 +1,168 @@
+{
+  "mode": "historical_live_mininet",
+  "measurement_date": "2026-10-11",
+  "review_date": "2026-10-20",
+  "source": "Phase 4 live acceptance; historical, not acceptance of the final October 20 changes",
+  "network_cleanup_success": true,
+  "stages": [
+    {
+      "stage": "baseline",
+      "timestamp": 1791724558.1944401,
+      "summary": {
+        "ping_latency_ms": 16.887,
+        "packet_loss_percent": 0.0,
+        "http_response_time_ms": 35.22,
+        "http_success": 1,
+        "throughput_mbps": 92.61
+      },
+      "http_status_codes": [
+        200,
+        200,
+        200
+      ],
+      "icmp": [
+        {
+          "source": "client",
+          "target": "edge_gw",
+          "rtt_avg_ms": 10.788,
+          "packet_loss_percent": 0.0,
+          "success": true
+        },
+        {
+          "source": "client",
+          "target": "web_srv",
+          "rtt_avg_ms": 16.887,
+          "packet_loss_percent": 0.0,
+          "success": true
+        },
+        {
+          "source": "client",
+          "target": "api_srv",
+          "rtt_avg_ms": 16.896,
+          "packet_loss_percent": 0.0,
+          "success": true
+        },
+        {
+          "source": "client",
+          "target": "db_srv",
+          "rtt_avg_ms": 18.997,
+          "packet_loss_percent": 0.0,
+          "success": true
+        },
+        {
+          "source": "web_srv",
+          "target": "db_srv",
+          "rtt_avg_ms": 2.637,
+          "packet_loss_percent": 0.0,
+          "success": true
+        }
+      ]
+    },
+    {
+      "stage": "application_down",
+      "timestamp": 1791724566.5631628,
+      "summary": {
+        "ping_latency_ms": 17.091,
+        "packet_loss_percent": 0.0,
+        "http_response_time_ms": null,
+        "http_success": 0,
+        "throughput_mbps": 92.6
+      },
+      "http_status_codes": [
+        0,
+        0,
+        0
+      ],
+      "icmp": [
+        {
+          "source": "client",
+          "target": "edge_gw",
+          "rtt_avg_ms": 10.743,
+          "packet_loss_percent": 0.0,
+          "success": true
+        },
+        {
+          "source": "client",
+          "target": "web_srv",
+          "rtt_avg_ms": 17.091,
+          "packet_loss_percent": 0.0,
+          "success": true
+        },
+        {
+          "source": "client",
+          "target": "api_srv",
+          "rtt_avg_ms": 16.99,
+          "packet_loss_percent": 0.0,
+          "success": true
+        },
+        {
+          "source": "client",
+          "target": "db_srv",
+          "rtt_avg_ms": 19.091,
+          "packet_loss_percent": 0.0,
+          "success": true
+        },
+        {
+          "source": "web_srv",
+          "target": "db_srv",
+          "rtt_avg_ms": 2.604,
+          "packet_loss_percent": 0.0,
+          "success": true
+        }
+      ]
+    },
+    {
+      "stage": "recovery",
+      "timestamp": 1791724574.63057,
+      "summary": {
+        "ping_latency_ms": 17.158,
+        "packet_loss_percent": 0.0,
+        "http_response_time_ms": 35.55,
+        "http_success": 1,
+        "throughput_mbps": 92.35
+      },
+      "http_status_codes": [
+        200,
+        200,
+        200
+      ],
+      "icmp": [
+        {
+          "source": "client",
+          "target": "edge_gw",
+          "rtt_avg_ms": 10.825,
+          "packet_loss_percent": 0.0,
+          "success": true
+        },
+        {
+          "source": "client",
+          "target": "web_srv",
+          "rtt_avg_ms": 17.158,
+          "packet_loss_percent": 0.0,
+          "success": true
+        },
+        {
+          "source": "client",
+          "target": "api_srv",
+          "rtt_avg_ms": 16.89,
+          "packet_loss_percent": 0.0,
+          "success": true
+        },
+        {
+          "source": "client",
+          "target": "db_srv",
+          "rtt_avg_ms": 19.646,
+          "packet_loss_percent": 0.0,
+          "success": true
+        },
+        {
+          "source": "web_srv",
+          "target": "db_srv",
+          "rtt_avg_ms": 2.603,
+          "packet_loss_percent": 0.0,
+          "success": true
+        }
+      ]
+    }
+  ]
+}

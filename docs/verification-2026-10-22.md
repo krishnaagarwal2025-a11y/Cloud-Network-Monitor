@@ -1,5 +1,19 @@
 # Live acceptance follow-up — 22 October 2026
 
+## Final update: LIVE ACCEPTANCE PASSED
+
+The user reran `sudo python3 scripts/verify_all.py --live` after fix `4540a7f`.
+The agent inspected `results/acceptance_1792648834955210084/acceptance.json`,
+the logs and all 31 raw cycles in `results/end_to_end_1792649053214953738/`.
+All **106 tests passed without skips**, and every acceptance stage returned zero.
+The Phase 6 and end-to-end faults, recovery, kernel restoration and cleanup all
+passed. Independent reanalysis reproduced the saved detector and localization
+results. The earlier blocker and failure diagnosis below are historical.
+
+See [final-results.md](final-results.md) for genuine measurements, evaluation,
+figures, cleanup and remaining limits.
+
+
 The user ran the full live acceptance for source revision `53b6c48`. The agent
 inspected `results/acceptance_1792648065134307579/acceptance.json`, its test log
 and the failing Phase 6 log. This is fresh live evidence, not recorded playback.
@@ -54,7 +68,7 @@ No project-named interfaces remained visible in the root namespace at inspection
 OVS database and complete namespace cleanup were not reverified without root.
 No blanket cleanup was performed.
 
-## Next live acceptance
+## Previously required rerun (now completed)
 
 From the Ubuntu terminal:
 

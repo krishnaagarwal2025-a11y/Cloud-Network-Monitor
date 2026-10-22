@@ -1,3 +1,6 @@
+> Superseded live-test status: full live acceptance passed on 22 October 2026.
+> See [final-results.md](final-results.md). The record below remains historical.
+
 # Verification record — 20 October 2026
 
 ## Scope and result

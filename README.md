@@ -2,10 +2,11 @@
 
 **A Multi-Layer, Real-Time Framework for Measuring, Analysing and Visualising the Network Performance of Cloud-Hosted Applications**
 
-**Current status (22 October 2026):** the live run passed all 100 tests and
-Phases 3–5. Phase 6 exposed an HTB warning-handling bug; a targeted fix and
-regressions are now in place. The post-fix live run remains pending sudo
-authentication. See [the latest diagnosis](docs/verification-2026-10-22.md).
+**Current status (22 October 2026): core live acceptance PASSED.** All 106 tests
+passed with no skips; all nine acceptance stages and the complete 31-cycle live
+fault/detection/localization/recovery demonstration passed. Kernel restoration
+and owned service/network cleanup were verified. See [measured results and
+figures](docs/final-results.md).
 
 ## Overview and problem statement
 
@@ -389,14 +390,17 @@ root scripts safe.
 
 ## Current verification status
 
-See [docs/audit-2026-10-11.md](docs/audit-2026-10-11.md) for exact final commands and
-outcomes. The final suite ran 86 tests: 84 passed and two root-only tests skipped.
-The initial suite was 73 tests (71 passed, two root-only skips) outside
-the socket-restricted sandbox. Standalone exporter binding, HTTP exposition and
-existing Prometheus scraping were directly verified, then the owned exporter was
-stopped. Recorded Phase 4 ingestion and Phase 5 panel queries passed. Portable
-Phase 6 simulation passed. New live Mininet/fault tests are blocked by interactive
-sudo and existing project resources. Historical evidence is separately labelled.
+The final live suite for source revision `4540a7f` passed all 106 tests with zero
+skips, all configuration checks, Phase 3–6 acceptance and the complete 31-cycle
+live experiment. Captured kernel settings matched before and after each fault;
+all five conditions recovered and owned resources shut down successfully.
+
+The agent independently reanalyzed all saved cycles and recomputed the evaluation.
+Reviewed evidence, measured figures and remaining limitations are in
+[docs/final-results.md](docs/final-results.md). The October 11 audit and October 20
+portable records remain historical; the October 22 live acceptance supersedes
+their live-test blockers. Grafana query/data checks are verified, while browser
+visual layout was not independently reviewed.
 
 ## Known limitations
 
@@ -405,7 +409,8 @@ active samples and tiny ping batches limit statistical conclusions. Core segment
 can be indistinguishable; multiple faults/noise can violate the model. Confidence
 is heuristic. Genuine one-way jitter and passive flow collection are absent.
 Grafana provisioning and query checks do not prove browser visual layout.
-Fresh-machine Ubuntu setup and modified live cleanup require further verification.
+Fresh-machine Ubuntu setup remains unverified. Owned fault restoration and live
+cleanup passed the final development-machine acceptance.
 
 ## Future work
 
@@ -451,14 +456,14 @@ configuration before changes, verifies actual delay/loss/rate/queue parameters
 on both interfaces and checks restoration before accepting recovery. Ground-truth
 condition/injection panels are separate from detection and candidate panels.
 
-The portable acceptance command is verified. **Fresh privileged acceptance of
-the final source remains pending because this agent session cannot authenticate
-sudo.** Historical live Phase 3/4 evidence is retained with its original date;
-it does not establish acceptance of the final experiment. Browser layout review
-was unavailable because the computer-use environment had no browser. Grafana's
-real panel query/data path was verified independently.
+The full live acceptance command passed on 22 October 2026. Actual measurements,
+per-detector outcomes, kernel restoration and cleanup evidence are published in
+a curated summary; raw experiment/service data remains local. Historical and
+synthetic runs retain their original provenance labels. Browser visual layout
+review and fresh-host installation are not claimed.
 
-- [Current verification and milestone status](docs/verification-2026-10-20.md)
+- [Final live results and figures](docs/final-results.md)
+- [Reviewed live evidence](docs/evidence/final-live-acceptance-2026-10-22.json)
 - [Methodology, evaluation and limits](docs/methodology.md)
 - [Reproducible demonstration procedure](docs/demo-guide.md)
 - [Reviewed historical live evidence](docs/evidence/historical-live-phase4.json)

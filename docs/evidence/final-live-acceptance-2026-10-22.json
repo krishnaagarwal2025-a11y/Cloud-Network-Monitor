@@ -1,0 +1,951 @@
+{
+  "date": "2026-10-22",
+  "tested_source_revision": "4540a7f",
+  "mode": "live_mininet",
+  "success": true,
+  "tests": {
+    "run": 106,
+    "passed": 106,
+    "skipped": 0
+  },
+  "acceptance_stages": [
+    {
+      "stage": "tests",
+      "exit_code": 0,
+      "duration_seconds": 31.634672045000116
+    },
+    {
+      "stage": "prometheus_config",
+      "exit_code": 0,
+      "duration_seconds": 0.11642428000004656
+    },
+    {
+      "stage": "setup_syntax",
+      "exit_code": 0,
+      "duration_seconds": 0.004427340000120239
+    },
+    {
+      "stage": "whitespace",
+      "exit_code": 0,
+      "duration_seconds": 0.008447964999959368
+    },
+    {
+      "stage": "phase3",
+      "exit_code": 0,
+      "duration_seconds": 56.71765737800001
+    },
+    {
+      "stage": "phase4",
+      "exit_code": 0,
+      "duration_seconds": 27.872758170999987
+    },
+    {
+      "stage": "phase5",
+      "exit_code": 0,
+      "duration_seconds": 47.366209046999984
+    },
+    {
+      "stage": "phase6",
+      "exit_code": 0,
+      "duration_seconds": 54.28252653699997
+    },
+    {
+      "stage": "end_to_end_live",
+      "exit_code": 0,
+      "duration_seconds": 285.4236475559999
+    }
+  ],
+  "elapsed_seconds": 503.4271857738495,
+  "cycles": 31,
+  "baseline_primary_path": {
+    "ping_latency_ms": {
+      "median": 17.563000000000002,
+      "minimum": 16.91,
+      "maximum": 18.024
+    },
+    "http_response_time_ms": {
+      "median": 36.739999999999995,
+      "minimum": 35.75,
+      "maximum": 38.59
+    },
+    "throughput_mbps": {
+      "median": 92.455,
+      "minimum": 92.12,
+      "maximum": 92.61
+    }
+  },
+  "settings": {
+    "baseline_cycles": 6,
+    "fault_cycles": 2,
+    "recovery_cycles": 3,
+    "icmp_count": 3,
+    "http_count": 3,
+    "iperf_duration": 2,
+    "scenarios": [
+      {
+        "name": "edge_delay",
+        "condition": "latency",
+        "segment": "seg_client_edge",
+        "parameters": {
+          "delay": "50ms"
+        }
+      },
+      {
+        "name": "database_loss",
+        "condition": "loss",
+        "segment": "seg_app_db",
+        "parameters": {
+          "loss": 100.0
+        }
+      },
+      {
+        "name": "core_ambiguity",
+        "condition": "latency",
+        "segment": "seg_edge_lb",
+        "parameters": {
+          "delay": "40ms"
+        }
+      },
+      {
+        "name": "edge_bandwidth",
+        "condition": "bandwidth",
+        "segment": "seg_client_edge",
+        "parameters": {
+          "bw": 20.0
+        }
+      },
+      {
+        "name": "web_unavailable",
+        "condition": "application_down",
+        "segment": null,
+        "parameters": {}
+      }
+    ]
+  },
+  "analysis_settings": {
+    "thresholds": {
+      "latency_ms": {
+        "client->edge_gw": 25.0,
+        "client->web_srv": 40.0,
+        "client->api_srv": 40.0,
+        "client->db_srv": 45.0,
+        "web_srv->db_srv": 10.0,
+        "default": 50.0
+      },
+      "packet_loss_ratio": 0.01,
+      "http_response_time_ms": 80.0,
+      "min_throughput_mbps": 50.0
+    },
+    "ewma_alpha": 0.3,
+    "ewma_k": 3.0,
+    "zscore_window": 15,
+    "zscore_thresh": 3.0,
+    "localisation": {
+      "latency_spike_threshold_ms": 20.0,
+      "loss_threshold_percent": 1.0
+    }
+  },
+  "evaluation": {
+    "unit": "one complete collection cycle",
+    "detectors": {
+      "threshold": {
+        "true_positive": 10,
+        "false_positive": 0,
+        "true_negative": 16,
+        "false_negative": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "false_positive_rate": 0.0,
+        "detection_delay_seconds": {
+          "edge_delay": 9.678447723388672,
+          "database_loss": 12.227691411972046,
+          "core_ambiguity": 9.31307077407837,
+          "edge_bandwidth": 7.58589243888855,
+          "web_unavailable": 7.568349123001099
+        }
+      },
+      "ewma": {
+        "true_positive": 8,
+        "false_positive": 0,
+        "true_negative": 16,
+        "false_negative": 2,
+        "precision": 1.0,
+        "recall": 0.8,
+        "false_positive_rate": 0.0,
+        "detection_delay_seconds": {
+          "edge_delay": 9.678447723388672,
+          "database_loss": 12.227691411972046,
+          "core_ambiguity": 9.31307077407837,
+          "edge_bandwidth": 7.58589243888855
+        }
+      },
+      "zscore": {
+        "true_positive": 5,
+        "false_positive": 0,
+        "true_negative": 16,
+        "false_negative": 5,
+        "precision": 1.0,
+        "recall": 0.5,
+        "false_positive_rate": 0.0,
+        "detection_delay_seconds": {
+          "edge_delay": 9.678447723388672,
+          "database_loss": 12.227691411972046,
+          "edge_bandwidth": 7.58589243888855
+        }
+      }
+    },
+    "localisation": {
+      "correct_clean": 23,
+      "exact_match": 4,
+      "ambiguous_contains_target": 2,
+      "missed_target": 2
+    },
+    "limitations": [
+      "Small controlled experiment; rates are not production accuracy estimates.",
+      "Fault-cycle labels come from requested/applied conditions, not measured magnitude.",
+      "Detection delay includes probe execution and collection cadence.",
+      "Bandwidth-only faults may not be identifiable from ICMP paths.",
+      "Candidate confidence is a single-fault heuristic, not a calibrated probability."
+    ]
+  },
+  "network_cleanup_success": true,
+  "service_cleanup_success": true,
+  "active_faults_after_cleanup": [],
+  "independent_reanalysis": "All 31 raw reports reproduced their saved analysis; evaluation recomputed identically; kernel snapshot fields reparsed and restoration matched.",
+  "scenarios": [
+    {
+      "name": "edge_delay",
+      "condition": "latency",
+      "segment": "seg_client_edge",
+      "parameters": {
+        "delay": "50ms"
+      },
+      "fault_measurements": [
+        {
+          "cycle": 7,
+          "timestamp": 1792649122.7003472,
+          "summary": {
+            "ping_latency_ms": 108.038,
+            "packet_loss_percent": 0.0,
+            "http_response_time_ms": 218.14,
+            "http_success": 1,
+            "throughput_mbps": 64.55
+          },
+          "max_measured_icmp_loss_percent": 0.0,
+          "anomaly_by_detector": {
+            "threshold": 7,
+            "ewma": 7,
+            "zscore": 7
+          },
+          "localisation": {
+            "timestamp": 1792649122.7003472,
+            "candidate_segments": [
+              "seg_client_edge"
+            ],
+            "confidence": 1.0,
+            "is_ambiguous": false,
+            "status": "localised",
+            "explanation": "Single-fault model identifies candidate seg_client_edge (supported by 4 degraded paths, 1 segments verified healthy).",
+            "healthy_paths": [
+              "web_srv->db_srv"
+            ],
+            "anomalous_paths": [
+              "client->edge_gw",
+              "client->web_srv",
+              "client->api_srv",
+              "client->db_srv"
+            ],
+            "eliminated_segments": [
+              "seg_app_db"
+            ]
+          }
+        },
+        {
+          "cycle": 8,
+          "timestamp": 1792649132.8506074,
+          "summary": {
+            "ping_latency_ms": 107.058,
+            "packet_loss_percent": 0.0,
+            "http_response_time_ms": 216.95,
+            "http_success": 1,
+            "throughput_mbps": 64.17
+          },
+          "max_measured_icmp_loss_percent": 0.0,
+          "anomaly_by_detector": {
+            "threshold": 7,
+            "ewma": 7,
+            "zscore": 0
+          },
+          "localisation": {
+            "timestamp": 1792649132.8506074,
+            "candidate_segments": [
+              "seg_client_edge"
+            ],
+            "confidence": 1.0,
+            "is_ambiguous": false,
+            "status": "localised",
+            "explanation": "Single-fault model identifies candidate seg_client_edge (supported by 4 degraded paths, 1 segments verified healthy).",
+            "healthy_paths": [
+              "web_srv->db_srv"
+            ],
+            "anomalous_paths": [
+              "client->edge_gw",
+              "client->web_srv",
+              "client->api_srv",
+              "client->db_srv"
+            ],
+            "eliminated_segments": [
+              "seg_app_db"
+            ]
+          }
+        }
+      ],
+      "recovery": {
+        "ping_latency_ms": 17.297,
+        "packet_loss_percent": 0.0,
+        "http_response_time_ms": 36.87,
+        "http_success": 1,
+        "throughput_mbps": 92.22
+      },
+      "kernel_states": {
+        "baseline_recorded": [
+          {
+            "interface": "s_client-eth2",
+            "parameters": {
+              "delay_ms": 5.0,
+              "loss": 0.0,
+              "bw": 100.0,
+              "max_queue_size": 1000
+            }
+          },
+          {
+            "interface": "s_edge-eth2",
+            "parameters": {
+              "delay_ms": 5.0,
+              "loss": 0.0,
+              "bw": 100.0,
+              "max_queue_size": 1000
+            }
+          }
+        ],
+        "applied": [
+          {
+            "interface": "s_client-eth2",
+            "parameters": {
+              "delay_ms": 50.0,
+              "loss": 0.0,
+              "bw": 100.0,
+              "max_queue_size": 1000
+            }
+          },
+          {
+            "interface": "s_edge-eth2",
+            "parameters": {
+              "delay_ms": 50.0,
+              "loss": 0.0,
+              "bw": 100.0,
+              "max_queue_size": 1000
+            }
+          }
+        ],
+        "restored": [
+          {
+            "interface": "s_client-eth2",
+            "parameters": {
+              "delay_ms": 5.0,
+              "loss": 0.0,
+              "bw": 100.0,
+              "max_queue_size": 1000
+            }
+          },
+          {
+            "interface": "s_edge-eth2",
+            "parameters": {
+              "delay_ms": 5.0,
+              "loss": 0.0,
+              "bw": 100.0,
+              "max_queue_size": 1000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "database_loss",
+      "condition": "loss",
+      "segment": "seg_app_db",
+      "parameters": {
+        "loss": 100.0
+      },
+      "fault_measurements": [
+        {
+          "cycle": 12,
+          "timestamp": 1792649170.516928,
+          "summary": {
+            "ping_latency_ms": 17.231,
+            "packet_loss_percent": 0.0,
+            "http_response_time_ms": 36.33,
+            "http_success": 1,
+            "throughput_mbps": 92.57
+          },
+          "max_measured_icmp_loss_percent": 100.0,
+          "anomaly_by_detector": {
+            "threshold": 3,
+            "ewma": 2,
+            "zscore": 2
+          },
+          "localisation": {
+            "timestamp": 1792649170.516928,
+            "candidate_segments": [
+              "seg_app_db"
+            ],
+            "confidence": 1.0,
+            "is_ambiguous": false,
+            "status": "localised",
+            "explanation": "Single-fault model identifies candidate seg_app_db (supported by 2 degraded paths, 3 segments verified healthy).",
+            "healthy_paths": [
+              "client->edge_gw",
+              "client->web_srv",
+              "client->api_srv"
+            ],
+            "anomalous_paths": [
+              "client->db_srv",
+              "web_srv->db_srv"
+            ],
+            "eliminated_segments": [
+              "seg_client_edge",
+              "seg_edge_lb",
+              "seg_lb_app"
+            ]
+          }
+        },
+        {
+          "cycle": 13,
+          "timestamp": 1792649183.2310753,
+          "summary": {
+            "ping_latency_ms": 17.302,
+            "packet_loss_percent": 0.0,
+            "http_response_time_ms": 36.41,
+            "http_success": 1,
+            "throughput_mbps": 92.61
+          },
+          "max_measured_icmp_loss_percent": 100.0,
+          "anomaly_by_detector": {
+            "threshold": 3,
+            "ewma": 2,
+            "zscore": 2
+          },
+          "localisation": {
+            "timestamp": 1792649183.2310753,
+            "candidate_segments": [
+              "seg_app_db"
+            ],
+            "confidence": 1.0,
+            "is_ambiguous": false,
+            "status": "localised",
+            "explanation": "Single-fault model identifies candidate seg_app_db (supported by 2 degraded paths, 3 segments verified healthy).",
+            "healthy_paths": [
+              "client->edge_gw",
+              "client->web_srv",
+              "client->api_srv"
+            ],
+            "anomalous_paths": [
+              "client->db_srv",
+              "web_srv->db_srv"
+            ],
+            "eliminated_segments": [
+              "seg_client_edge",
+              "seg_edge_lb",
+              "seg_lb_app"
+            ]
+          }
+        }
+      ],
+      "recovery": {
+        "ping_latency_ms": 17.094,
+        "packet_loss_percent": 0.0,
+        "http_response_time_ms": 35.36,
+        "http_success": 1,
+        "throughput_mbps": 92.37
+      },
+      "kernel_states": {
+        "baseline_recorded": [
+          {
+            "interface": "s_app-eth5",
+            "parameters": {
+              "delay_ms": 1.0,
+              "loss": 0.0,
+              "bw": 1000.0,
+              "max_queue_size": 1000
+            }
+          },
+          {
+            "interface": "s_db-eth2",
+            "parameters": {
+              "delay_ms": 1.0,
+              "loss": 0.0,
+              "bw": 1000.0,
+              "max_queue_size": 1000
+            }
+          }
+        ],
+        "applied": [
+          {
+            "interface": "s_app-eth5",
+            "parameters": {
+              "delay_ms": 1.0,
+              "loss": 100.0,
+              "bw": 1000.0,
+              "max_queue_size": 1000
+            }
+          },
+          {
+            "interface": "s_db-eth2",
+            "parameters": {
+              "delay_ms": 1.0,
+              "loss": 100.0,
+              "bw": 1000.0,
+              "max_queue_size": 1000
+            }
+          }
+        ],
+        "restored": [
+          {
+            "interface": "s_app-eth5",
+            "parameters": {
+              "delay_ms": 1.0,
+              "loss": 0.0,
+              "bw": 1000.0,
+              "max_queue_size": 1000
+            }
+          },
+          {
+            "interface": "s_db-eth2",
+            "parameters": {
+              "delay_ms": 1.0,
+              "loss": 0.0,
+              "bw": 1000.0,
+              "max_queue_size": 1000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "core_ambiguity",
+      "condition": "latency",
+      "segment": "seg_edge_lb",
+      "parameters": {
+        "delay": "40ms"
+      },
+      "fault_measurements": [
+        {
+          "cycle": 17,
+          "timestamp": 1792649218.498819,
+          "summary": {
+            "ping_latency_ms": 93.601,
+            "packet_loss_percent": 0.0,
+            "http_response_time_ms": 189.12,
+            "http_success": 1,
+            "throughput_mbps": 69.04
+          },
+          "max_measured_icmp_loss_percent": 0.0,
+          "anomaly_by_detector": {
+            "threshold": 6,
+            "ewma": 6,
+            "zscore": 0
+          },
+          "localisation": {
+            "timestamp": 1792649218.498819,
+            "candidate_segments": [
+              "seg_edge_lb",
+              "seg_lb_app"
+            ],
+            "confidence": 0.5,
+            "is_ambiguous": true,
+            "status": "ambiguous",
+            "explanation": "Fault localised to candidate set ['seg_edge_lb', 'seg_lb_app']; segments are topologically indistinguishable under current probe matrix.",
+            "healthy_paths": [
+              "client->edge_gw",
+              "web_srv->db_srv"
+            ],
+            "anomalous_paths": [
+              "client->web_srv",
+              "client->api_srv",
+              "client->db_srv"
+            ],
+            "eliminated_segments": [
+              "seg_app_db",
+              "seg_client_edge"
+            ]
+          }
+        },
+        {
+          "cycle": 18,
+          "timestamp": 1792649228.506069,
+          "summary": {
+            "ping_latency_ms": 92.915,
+            "packet_loss_percent": 0.0,
+            "http_response_time_ms": 187.37,
+            "http_success": 1,
+            "throughput_mbps": 69.8
+          },
+          "max_measured_icmp_loss_percent": 0.0,
+          "anomaly_by_detector": {
+            "threshold": 6,
+            "ewma": 6,
+            "zscore": 0
+          },
+          "localisation": {
+            "timestamp": 1792649228.506069,
+            "candidate_segments": [
+              "seg_edge_lb",
+              "seg_lb_app"
+            ],
+            "confidence": 0.5,
+            "is_ambiguous": true,
+            "status": "ambiguous",
+            "explanation": "Fault localised to candidate set ['seg_edge_lb', 'seg_lb_app']; segments are topologically indistinguishable under current probe matrix.",
+            "healthy_paths": [
+              "client->edge_gw",
+              "web_srv->db_srv"
+            ],
+            "anomalous_paths": [
+              "client->web_srv",
+              "client->api_srv",
+              "client->db_srv"
+            ],
+            "eliminated_segments": [
+              "seg_app_db",
+              "seg_client_edge"
+            ]
+          }
+        }
+      ],
+      "recovery": {
+        "ping_latency_ms": 17.4,
+        "packet_loss_percent": 0.0,
+        "http_response_time_ms": 36.82,
+        "http_success": 1,
+        "throughput_mbps": 92.66
+      },
+      "kernel_states": {
+        "baseline_recorded": [
+          {
+            "interface": "s_edge-eth3",
+            "parameters": {
+              "delay_ms": 2.0,
+              "loss": 0.0,
+              "bw": 1000.0,
+              "max_queue_size": 1000
+            }
+          },
+          {
+            "interface": "s_lb-eth2",
+            "parameters": {
+              "delay_ms": 2.0,
+              "loss": 0.0,
+              "bw": 1000.0,
+              "max_queue_size": 1000
+            }
+          }
+        ],
+        "applied": [
+          {
+            "interface": "s_edge-eth3",
+            "parameters": {
+              "delay_ms": 40.0,
+              "loss": 0.0,
+              "bw": 1000.0,
+              "max_queue_size": 1000
+            }
+          },
+          {
+            "interface": "s_lb-eth2",
+            "parameters": {
+              "delay_ms": 40.0,
+              "loss": 0.0,
+              "bw": 1000.0,
+              "max_queue_size": 1000
+            }
+          }
+        ],
+        "restored": [
+          {
+            "interface": "s_edge-eth3",
+            "parameters": {
+              "delay_ms": 2.0,
+              "loss": 0.0,
+              "bw": 1000.0,
+              "max_queue_size": 1000
+            }
+          },
+          {
+            "interface": "s_lb-eth2",
+            "parameters": {
+              "delay_ms": 2.0,
+              "loss": 0.0,
+              "bw": 1000.0,
+              "max_queue_size": 1000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "edge_bandwidth",
+      "condition": "bandwidth",
+      "segment": "seg_client_edge",
+      "parameters": {
+        "bw": 20.0
+      },
+      "fault_measurements": [
+        {
+          "cycle": 22,
+          "timestamp": 1792649261.8688323,
+          "summary": {
+            "ping_latency_ms": 16.855,
+            "packet_loss_percent": 0.0,
+            "http_response_time_ms": 35.2,
+            "http_success": 1,
+            "throughput_mbps": 18.8
+          },
+          "max_measured_icmp_loss_percent": 0.0,
+          "anomaly_by_detector": {
+            "threshold": 2,
+            "ewma": 2,
+            "zscore": 2
+          },
+          "localisation": {
+            "timestamp": 1792649261.8688323,
+            "candidate_segments": [],
+            "confidence": 1.0,
+            "is_ambiguous": false,
+            "status": "healthy",
+            "explanation": "Observed paths cover every segment; no network faults detected.",
+            "healthy_paths": [
+              "client->edge_gw",
+              "client->web_srv",
+              "client->api_srv",
+              "client->db_srv",
+              "web_srv->db_srv"
+            ],
+            "anomalous_paths": [],
+            "eliminated_segments": [
+              "seg_app_db",
+              "seg_client_edge",
+              "seg_edge_lb",
+              "seg_lb_app"
+            ]
+          }
+        },
+        {
+          "cycle": 23,
+          "timestamp": 1792649269.7261817,
+          "summary": {
+            "ping_latency_ms": 17.372,
+            "packet_loss_percent": 0.0,
+            "http_response_time_ms": 36.77,
+            "http_success": 1,
+            "throughput_mbps": 18.79
+          },
+          "max_measured_icmp_loss_percent": 0.0,
+          "anomaly_by_detector": {
+            "threshold": 2,
+            "ewma": 2,
+            "zscore": 1
+          },
+          "localisation": {
+            "timestamp": 1792649269.7261817,
+            "candidate_segments": [],
+            "confidence": 1.0,
+            "is_ambiguous": false,
+            "status": "healthy",
+            "explanation": "Observed paths cover every segment; no network faults detected.",
+            "healthy_paths": [
+              "client->edge_gw",
+              "client->web_srv",
+              "client->api_srv",
+              "client->db_srv",
+              "web_srv->db_srv"
+            ],
+            "anomalous_paths": [],
+            "eliminated_segments": [
+              "seg_app_db",
+              "seg_client_edge",
+              "seg_edge_lb",
+              "seg_lb_app"
+            ]
+          }
+        }
+      ],
+      "recovery": {
+        "ping_latency_ms": 16.942,
+        "packet_loss_percent": 0.0,
+        "http_response_time_ms": 37.0,
+        "http_success": 1,
+        "throughput_mbps": 92.61
+      },
+      "kernel_states": {
+        "baseline_recorded": [
+          {
+            "interface": "s_client-eth2",
+            "parameters": {
+              "delay_ms": 5.0,
+              "loss": 0.0,
+              "bw": 100.0,
+              "max_queue_size": 1000
+            }
+          },
+          {
+            "interface": "s_edge-eth2",
+            "parameters": {
+              "delay_ms": 5.0,
+              "loss": 0.0,
+              "bw": 100.0,
+              "max_queue_size": 1000
+            }
+          }
+        ],
+        "applied": [
+          {
+            "interface": "s_client-eth2",
+            "parameters": {
+              "delay_ms": 5.0,
+              "loss": 0.0,
+              "bw": 20.0,
+              "max_queue_size": 1000
+            }
+          },
+          {
+            "interface": "s_edge-eth2",
+            "parameters": {
+              "delay_ms": 5.0,
+              "loss": 0.0,
+              "bw": 20.0,
+              "max_queue_size": 1000
+            }
+          }
+        ],
+        "restored": [
+          {
+            "interface": "s_client-eth2",
+            "parameters": {
+              "delay_ms": 5.0,
+              "loss": 0.0,
+              "bw": 100.0,
+              "max_queue_size": 1000
+            }
+          },
+          {
+            "interface": "s_edge-eth2",
+            "parameters": {
+              "delay_ms": 5.0,
+              "loss": 0.0,
+              "bw": 100.0,
+              "max_queue_size": 1000
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "web_unavailable",
+      "condition": "application_down",
+      "segment": null,
+      "parameters": {},
+      "fault_measurements": [
+        {
+          "cycle": 27,
+          "timestamp": 1792649302.796325,
+          "summary": {
+            "ping_latency_ms": 17.963,
+            "packet_loss_percent": 0.0,
+            "http_response_time_ms": null,
+            "http_success": 0,
+            "throughput_mbps": 92.6
+          },
+          "max_measured_icmp_loss_percent": 0.0,
+          "anomaly_by_detector": {
+            "threshold": 3,
+            "ewma": 0,
+            "zscore": 0
+          },
+          "localisation": {
+            "timestamp": 1792649302.796325,
+            "candidate_segments": [],
+            "confidence": 1.0,
+            "is_ambiguous": false,
+            "status": "healthy",
+            "explanation": "Observed paths cover every segment; no network faults detected.",
+            "healthy_paths": [
+              "client->edge_gw",
+              "client->web_srv",
+              "client->api_srv",
+              "client->db_srv",
+              "web_srv->db_srv"
+            ],
+            "anomalous_paths": [],
+            "eliminated_segments": [
+              "seg_app_db",
+              "seg_client_edge",
+              "seg_edge_lb",
+              "seg_lb_app"
+            ]
+          }
+        },
+        {
+          "cycle": 28,
+          "timestamp": 1792649310.621194,
+          "summary": {
+            "ping_latency_ms": 17.496,
+            "packet_loss_percent": 0.0,
+            "http_response_time_ms": null,
+            "http_success": 0,
+            "throughput_mbps": 92.59
+          },
+          "max_measured_icmp_loss_percent": 0.0,
+          "anomaly_by_detector": {
+            "threshold": 3,
+            "ewma": 0,
+            "zscore": 0
+          },
+          "localisation": {
+            "timestamp": 1792649310.621194,
+            "candidate_segments": [],
+            "confidence": 1.0,
+            "is_ambiguous": false,
+            "status": "healthy",
+            "explanation": "Observed paths cover every segment; no network faults detected.",
+            "healthy_paths": [
+              "client->edge_gw",
+              "client->web_srv",
+              "client->api_srv",
+              "client->db_srv",
+              "web_srv->db_srv"
+            ],
+            "anomalous_paths": [],
+            "eliminated_segments": [
+              "seg_app_db",
+              "seg_client_edge",
+              "seg_edge_lb",
+              "seg_lb_app"
+            ]
+          }
+        }
+      ],
+      "recovery": {
+        "ping_latency_ms": 16.785,
+        "packet_loss_percent": 0.0,
+        "http_response_time_ms": 35.51,
+        "http_success": 1,
+        "throughput_mbps": 92.31
+      }
+    }
+  ],
+  "limitations": [
+    "Single controlled lab run, not general detector accuracy.",
+    "Browser layout was not independently visually reviewed.",
+    "Fresh-machine installation and production-cloud deployment not verified."
+  ]
+}

@@ -1,5 +1,9 @@
 # Reproducible university demonstration
 
+Final live acceptance passed on 22 October 2026: 106 tests, no skips, and all
+experiment stages. See [final-results.md](final-results.md) for the reviewed
+measurements and figures. The commands below reproduce that demonstration.
+
 ## Prepare once
 
 Follow the Ubuntu setup in README. Ensure Mininet/OVS, ping/curl/iperf3,

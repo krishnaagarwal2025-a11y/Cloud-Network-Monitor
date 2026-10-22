@@ -1,3 +1,8 @@
+> Final update, 22 October 2026: all 106 tests and all live acceptance stages
+> passed, including the 31-cycle fault/recovery demonstration and cleanup.
+> See [final-results.md](final-results.md). Earlier pending statements below
+> describe historical runs.
+
 > Update, 20 October 2026: see [verification-2026-10-20.md](verification-2026-10-20.md)
 > for the final experiment, current acceptance results and privileged-test blocker.
 > The phase counts and claims below remain historical.

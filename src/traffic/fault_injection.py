@@ -167,11 +167,23 @@ class FaultInjector:
         """TCIntf returns command output even when tc fails: inspect every result."""
         result = intf.config(bw=params['bw'], delay=params['delay'], loss=params['loss'],
                              max_queue_size=params.get('max_queue_size', 1000))
-        if not isinstance(result, dict) or any(str(out).strip() for out in result.get('tcoutputs', [])):
+        if not isinstance(result, dict):
+            raise RuntimeError(f'tc configuration failed on {intf.name}: {result}')
+        # HTB emits this advisory on successful high-bandwidth class creation.
+        # Other warnings and errors, including mixed output blocks, still fail.
+        advisory = re.compile(r'Warning: sch_htb: quantum of class [0-9a-fA-F]+ is big\. Consider r2q change\.')
+        lines = [line.strip() for out in result.get('tcoutputs', [])
+                 for line in str(out).splitlines() if line.strip()]
+        if any(not advisory.fullmatch(line) for line in lines):
             raise RuntimeError(f'tc configuration failed on {intf.name}: {result}')
         output = intf.cmd('tc qdisc show dev', intf.name)
         if 'netem' not in output or 'htb' not in output:
             raise RuntimeError(f'Expected HTB/netem qdisc missing on {intf.name}: {output}')
+        if lines:
+            # A warning is acceptable only after exact parameter readback succeeds.
+            classes = intf.cmd('tc class show dev', intf.name)
+            actual = FaultInjector.parse_state(output, classes)
+            FaultInjector._assert_parameters(intf.name, actual, params)
 
     def restore_all(self):
         """Restore all active impairments."""
@@ -221,16 +233,20 @@ class FaultInjector:
         if self.net is None:
             return snapshot
         config = expected or SEGMENTS[segment_name]
+        for interface in snapshot['interfaces']:
+            self._assert_parameters(interface['interface'], interface['parameters'], config)
+        return snapshot
+
+    @staticmethod
+    def _assert_parameters(interface_name, actual, config):
         match = re.fullmatch(r'([\d.]+)(us|ms|s)', config['delay'])
         wanted = {'delay_ms': float(match[1]) * {'us': 0.001, 'ms': 1, 's': 1000}[match[2]],
                   'loss': config['loss'], 'bw': config['bw'],
                   'max_queue_size': config.get('max_queue_size', 1000)}
-        for interface in snapshot['interfaces']:
-            for key, value in wanted.items():
-                if not math.isclose(interface['parameters'][key], value, rel_tol=0.001, abs_tol=0.001):
-                    raise RuntimeError(f'Actual {key} on {interface["interface"]} does not match '
-                                       f'requested value {value}: {interface["parameters"][key]}')
-        return snapshot
+        for key, value in wanted.items():
+            if not math.isclose(actual[key], value, rel_tol=0.001, abs_tol=0.001):
+                raise RuntimeError(f'Actual {key} on {interface_name} does not match '
+                                   f'requested value {value}: {actual[key]}')
 
 
 @contextmanager

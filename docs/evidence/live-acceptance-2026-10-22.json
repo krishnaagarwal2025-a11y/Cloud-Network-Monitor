@@ -1,0 +1,81 @@
+{
+  "date": "2026-10-22",
+  "source_revision": "53b6c48",
+  "mode": "live_mininet",
+  "success": false,
+  "root_tests": {
+    "run": 100,
+    "passed": 100,
+    "skipped": 0
+  },
+  "stages": [
+    {
+      "stage": "tests",
+      "exit_code": 0
+    },
+    {
+      "stage": "prometheus_config",
+      "exit_code": 0
+    },
+    {
+      "stage": "setup_syntax",
+      "exit_code": 0
+    },
+    {
+      "stage": "whitespace",
+      "exit_code": 0
+    },
+    {
+      "stage": "phase3",
+      "exit_code": 0
+    },
+    {
+      "stage": "phase4",
+      "exit_code": 0
+    },
+    {
+      "stage": "phase5",
+      "exit_code": 0
+    },
+    {
+      "stage": "phase6",
+      "exit_code": 1
+    }
+  ],
+  "failed_stage": "phase6",
+  "root_cause": "FaultInjector incorrectly treated the known HTB quantum advisory as a tc command failure during apply and rollback.",
+  "fix": "Accept only this exact warning after verifying requested delay, loss, bandwidth and queue size by kernel readback. Reject other/mixed output.",
+  "remaining": "Live Phase 6 and final end-to-end acceptance must be rerun after the fix.",
+  "post_fix_portable": {
+    "success": true,
+    "tests_run": 106,
+    "passed": 104,
+    "root_tests_skipped": 2,
+    "stages": [
+      {
+        "stage": "tests",
+        "exit_code": 0
+      },
+      {
+        "stage": "prometheus_config",
+        "exit_code": 0
+      },
+      {
+        "stage": "setup_syntax",
+        "exit_code": 0
+      },
+      {
+        "stage": "whitespace",
+        "exit_code": 0
+      },
+      {
+        "stage": "phase6_simulation",
+        "exit_code": 0
+      },
+      {
+        "stage": "end_to_end_simulation",
+        "exit_code": 0
+      }
+    ]
+  }
+}

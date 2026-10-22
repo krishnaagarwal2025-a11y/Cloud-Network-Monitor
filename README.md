@@ -2,9 +2,10 @@
 
 **A Multi-Layer, Real-Time Framework for Measuring, Analysing and Visualising the Network Performance of Cloud-Hosted Applications**
 
-**Current status (20 October 2026):** the end-to-end experiment and portable
-acceptance suite are implemented. Fresh privileged acceptance of the final
-source is pending sudo authentication. See [the current verification report](docs/verification-2026-10-20.md).
+**Current status (22 October 2026):** the live run passed all 100 tests and
+Phases 3–5. Phase 6 exposed an HTB warning-handling bug; a targeted fix and
+regressions are now in place. The post-fix live run remains pending sudo
+authentication. See [the latest diagnosis](docs/verification-2026-10-22.md).
 
 ## Overview and problem statement
 
